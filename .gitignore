@@ -31,5 +31,8 @@ __pycache__/
 # Docker test output
 skeleton_python/docker_test_output/*
 
+# Fiji macro
+fiji_ijm/
+
 # IDE
 .vscode/
