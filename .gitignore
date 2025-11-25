@@ -28,5 +28,8 @@ kimimaro/*
 __pycache__/
 *.pyc
 
+# Docker test output
+skeleton_python/docker_test_output/
+
 # IDE
 .vscode/
