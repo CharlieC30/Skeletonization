@@ -3,13 +3,13 @@ DATA/*
 !DATA/.gitkeep
 
 segment/*
-!segment/.gitkeep
+# !segment/.gitkeep
 
 skeleton_result_fiji/*
-!skeleton_result_fiji/.gitkeep
+# !skeleton_result_fiji/.gitkeep
 
 skeleton_result_kimimaro/*
-!skeleton_result_kimimaro/.gitkeep
+# !skeleton_result_kimimaro/.gitkeep
 
 skeleton_python/preprocess_output/*
 !skeleton_python/preprocess_output/.gitkeep
@@ -18,7 +18,7 @@ skeleton_python/skeletonize_output/*
 !skeleton_python/skeletonize_output/.gitkeep
 
 skeleton_python/DATA/ori_image/*
-!skeleton_python/DATA/ori_image/.gitkeep
+# !skeleton_python/DATA/ori_image/.gitkeep
 
 # Kimimaro: exclude all except script/
 kimimaro/*
