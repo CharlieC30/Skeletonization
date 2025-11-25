@@ -1,10 +1,24 @@
-# Keep directory structure but ignore contents
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+
+# Kimimaro: exclude all except scripts/
+kimimaro/*
+!kimimaro/scripts/
+
+# Docker test output
+skeleton_python/docker_test_output/*
+
 DATA/*
 !DATA/.gitkeep
 segment/*
 skeleton_result_fiji/*
 skeleton_result_kimimaro/*
 
+# skeleton_python 
 skeleton_python/DATA/*
 !skeleton_python/DATA/.gitkeep
 
@@ -13,20 +27,3 @@ skeleton_python/preprocess_output/*
 
 skeleton_python/skeletonize_output/*
 !skeleton_python/skeletonize_output/.gitkeep
-
-# Kimimaro: exclude all except scripts/
-kimimaro/*
-!kimimaro/scripts/
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Docker test output
-skeleton_python/docker_test_output/*
-
-# Fiji macro
-fiji_ijm/
-
-# IDE
-.vscode/
