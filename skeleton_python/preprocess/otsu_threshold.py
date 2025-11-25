@@ -1,0 +1,147 @@
+"""
+Otsu thresholding for TIF stacks.
+Applies stack histogram mode (single threshold for entire 3D volume).
+"""
+
+import os
+import sys
+from pathlib import Path
+import numpy as np
+import tifffile
+from skimage.filters import threshold_otsu
+
+BASE_DIR = Path(__file__).parent.parent.resolve()
+
+
+def compute_stack_otsu_threshold(image: np.ndarray) -> float:
+    """Compute single Otsu threshold from entire 3D stack."""
+    if image.ndim not in (2, 3):
+        raise ValueError(f"Expected 2D or 3D array, got {image.ndim}D")
+
+    threshold = threshold_otsu(image.ravel())
+    return float(threshold)
+
+
+def apply_threshold(image: np.ndarray, threshold: float) -> np.ndarray:
+    """Apply threshold to create binary mask (0/255)."""
+    binary = (image >= threshold).astype(np.uint8) * 255
+    return binary
+
+
+def process_single_file(input_path: str, output_dir: str, progress: str = "") -> str:
+    """Process single TIF file: compute Otsu threshold and binarize."""
+    progress_prefix = f"{progress}: " if progress else ""
+    print(f"Processing {progress_prefix}{input_path}")
+
+    # Load image (assuming already processed by check_tif_format.py)
+    image = tifffile.imread(input_path)
+
+    # Ensure 3D array
+    if image.ndim == 2:
+        image = image[np.newaxis, ...]
+    elif image.ndim != 3:
+        raise ValueError(f"Unexpected dimensions: {image.ndim}. Expected 2D or 3D.")
+
+    print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
+
+    # Compute Otsu threshold on entire stack
+    threshold = compute_stack_otsu_threshold(image)
+    print(f"  Otsu threshold: {threshold:.2f}")
+
+    # Apply threshold
+    binary = apply_threshold(image, threshold)
+
+    # Generate output path with _otsu suffix
+    input_name = Path(input_path).stem
+    output_path = os.path.join(output_dir, f"{input_name}_otsu.tif")
+
+    # Save binary mask
+    tifffile.imwrite(output_path, binary, imagej=True, metadata={'axes': 'ZYX'})
+    print(f"  Saved to: {output_path}")
+
+    return output_path
+
+
+def process_directory(input_dir: str, output_dir: str = None) -> None:
+    """Process all TIF files in directory with Otsu thresholding."""
+    input_dir_obj = Path(input_dir)
+    if not input_dir_obj.is_absolute():
+        input_dir_obj = BASE_DIR / input_dir
+    input_dir = str(input_dir_obj.resolve())
+
+    if not os.path.exists(input_dir):
+        raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
+
+    if not os.path.isdir(input_dir):
+        raise ValueError(f"Input path is not a directory: {input_dir}")
+
+    # Auto-detect 01_format subdirectory if current dir has no TIF files
+    potential_format_dir = os.path.join(input_dir, '01_format')
+    if os.path.exists(potential_format_dir) and os.path.isdir(potential_format_dir):
+        current_tifs = [f for f in os.listdir(input_dir)
+                       if f.lower().endswith(('.tif', '.tiff')) and os.path.isfile(os.path.join(input_dir, f))]
+        if not current_tifs:
+            input_dir = potential_format_dir
+            print(f"Auto-detected input directory: {input_dir}")
+
+    # Auto-detect output directory based on input path structure
+    if output_dir is None:
+        input_path = Path(input_dir)
+        if input_path.name == '01_format' and input_path.parent.parent.name == 'preprocess_output':
+            # Input is preprocess_output/YYYYMMDD_HHMMSS/01_format/ -> output to 02_otsu/
+            output_dir = str(input_path.parent / '02_otsu')
+        else:
+            # Create 02_otsu/ in parent directory
+            output_dir = str(input_path.parent / '02_otsu')
+
+    # Find all TIF files
+    tif_files = [
+        os.path.join(input_dir, f)
+        for f in os.listdir(input_dir)
+        if f.lower().endswith(('.tif', '.tiff')) and '_otsu' not in f
+    ]
+
+    if not tif_files:
+        raise ValueError(f"No TIF files found in directory: {input_dir}")
+
+    print(f"Found {len(tif_files)} TIF files in directory")
+    print(f"Output directory: {output_dir}")
+
+    # Create output directory before processing
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Process each file
+    for idx, tif_file in enumerate(tif_files, start=1):
+        try:
+            process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}")
+        except Exception as e:
+            print(f"Error processing {tif_file}: {e}")
+            raise
+
+    print(f"Completed processing {len(tif_files)} files")
+
+
+def main():
+    """CLI entry point."""
+    if len(sys.argv) < 2:
+        print("Usage: python otsu_threshold.py <input_directory> [output_directory]")
+        print("  input_directory: Directory containing TIF files (relative to BASE_DIR or absolute)")
+        print("  output_directory: Optional output directory (default: auto-detect as 02_otsu)")
+        sys.exit(1)
+
+    input_dir = sys.argv[1]
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+
+    try:
+        process_directory(input_dir, output_dir)
+        print("Processing completed")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
+
+
+# python preprocess/otsu_threshold.py preprocess_output/20251117_171518/

@@ -1,0 +1,14 @@
+# Python compiled files
+__pycache__/
+*.pyc
+
+# Local output directories
+preprocess_output/
+skeletonize_output/
+
+# Input data
+DATA/
+
+# Git
+.git/
+.gitignore
