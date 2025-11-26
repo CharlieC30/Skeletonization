@@ -1,19 +1,22 @@
 """
-TIF format validation and correction utility.
-Handles ImageJ virtual stack issues, converts to uint8.
+TIF format validation and conversion utility.
+
+Handles ImageJ virtual stack issues, normalizes values, and converts to uint8.
+Supports single 3D TIF files or directories of 2D TIF sequences.
 """
 
 import os
-import re
 import sys
+import argparse
 import logging
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import tifffile
+from natsort import natsorted
 
-from pipeline.utils import ensure_3d, setup_logging
+from pipeline.utils import setup_logging, load_config, PREPROCESS_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +86,15 @@ def load_and_check_tif(path: str) -> np.ndarray:
                     return image
 
         image = tifffile.imread(path)
-        image = ensure_3d(image)
+
+        if image.ndim == 2:
+            raise ValueError(
+                f"Input is 2D ({image.shape}). "
+                "Skeletonization requires 3D data. "
+                "For 2D slice sequence, provide folder path instead."
+            )
+        elif image.ndim != 3:
+            raise ValueError(f"Expected 3D array, got {image.ndim}D")
 
         logger.debug(f"Loaded shape {image.shape}, dtype {image.dtype}")
         return image
@@ -92,39 +103,55 @@ def load_and_check_tif(path: str) -> np.ndarray:
         raise ValueError(f"Failed to read TIF file {path}: {e}")
 
 
-def normalize_to_uint8(array: np.ndarray) -> np.ndarray:
-    """Convert array to uint8 with linear scaling.
+def normalize(array: np.ndarray,
+              method: str = 'minmax',
+              percentile_low: float = 0.0,
+              percentile_high: float = 100.0) -> np.ndarray:
+    """Normalize array values to [0, 1] range.
 
     Args:
         array: Input numpy array of any numeric dtype.
+        method: Normalization method, 'minmax' or 'percentile'.
+        percentile_low: Lower percentile for clipping (only for 'percentile').
+        percentile_high: Upper percentile for clipping (only for 'percentile').
 
     Returns:
-        uint8 numpy array scaled to [0, 255].
+        Normalized array with values in [0, 1] range.
+
+    Raises:
+        ValueError: If unknown method is specified.
+    """
+    if method == 'minmax':
+        arr_min, arr_max = array.min(), array.max()
+    elif method == 'percentile':
+        arr_min = np.percentile(array, percentile_low)
+        arr_max = np.percentile(array, percentile_high)
+    else:
+        raise ValueError(f"Unknown normalization method: {method}")
+
+    if arr_min == arr_max:
+        logger.debug("Array has constant value, returning zeros")
+        return np.zeros_like(array, dtype=np.float64)
+
+    clipped = np.clip(array, arr_min, arr_max)
+    normalized = (clipped.astype(np.float64) - arr_min) / (arr_max - arr_min)
+    logger.debug(f"Normalized using {method} (range [{arr_min:.2f}, {arr_max:.2f}])")
+    return normalized
+
+
+def convert_to_uint8(array: np.ndarray) -> np.ndarray:
+    """Convert normalized [0, 1] array to uint8 [0, 255].
+
+    Args:
+        array: Normalized array with values in [0, 1] range.
+
+    Returns:
+        uint8 array with values in [0, 255].
     """
     if array.dtype == np.uint8:
         return array
 
-    arr_min, arr_max = array.min(), array.max()
-
-    if arr_min == arr_max:
-        return np.zeros_like(array, dtype=np.uint8)
-
-    scaled = (array.astype(np.float64) - arr_min) / (arr_max - arr_min) * 255
-    logger.debug(f"Converted to uint8 (scaled from range [{arr_min:.2f}, {arr_max:.2f}])")
-    return scaled.astype(np.uint8)
-
-
-def natural_sort_key(filename: str) -> list:
-    """Generate sort key for natural numeric ordering.
-
-    Args:
-        filename: Filename string to generate key for.
-
-    Returns:
-        List of string and int parts for sorting.
-    """
-    return [int(c) if c.isdigit() else c.lower()
-            for c in re.split(r'(\d+)', filename)]
+    return (array * 255).astype(np.uint8)
 
 
 def load_2d_sequence(folder_path: str) -> np.ndarray:
@@ -137,20 +164,35 @@ def load_2d_sequence(folder_path: str) -> np.ndarray:
         3D numpy array with shape (Z, Y, X), or None if not a 2D sequence.
 
     Raises:
-        ValueError: If no TIF files found or mixed dimensions detected.
+        ValueError: If no TIF files found, mixed dimensions, or single 2D file.
     """
     tif_files = [f for f in os.listdir(folder_path)
                  if f.lower().endswith(('.tif', '.tiff'))]
-    tif_files = sorted(tif_files, key=natural_sort_key)
+    tif_files = natsorted(tif_files)
 
     if not tif_files:
         raise ValueError(f"No TIF files found in {folder_path}")
 
-    # Check if first file is 2D
+    # Check first file using load_and_check_tif to handle virtual stacks
     first_path = os.path.join(folder_path, tif_files[0])
-    first = tifffile.imread(first_path)
-    if first.ndim != 2:
-        return None  # Not a 2D sequence, use existing logic
+    try:
+        first = load_and_check_tif(first_path)
+        # If load_and_check_tif succeeds, it's 3D (not a 2D sequence)
+        return None
+    except ValueError as e:
+        # Check if error is due to 2D input
+        if "2D" in str(e):
+            # It's a 2D file, continue with 2D sequence logic
+            first = tifffile.imread(first_path)
+        else:
+            raise
+
+    # Single 2D file is not valid
+    if len(tif_files) == 1:
+        raise ValueError(
+            f"Single 2D file found ({first.shape}). "
+            "Skeletonization requires 3D data with multiple slices."
+        )
 
     logger.debug(f"Detected 2D sequence ({len(tif_files)} files)")
 
@@ -165,17 +207,25 @@ def load_2d_sequence(folder_path: str) -> np.ndarray:
         slices.append(img)
 
     stack = np.stack(slices, axis=0)
-    logger.debug(f"Loaded shape {stack.shape}, dtype {stack.dtype}")
+    logger.debug(f"Stacked {len(slices)} slices, shape {stack.shape}, dtype {stack.dtype}")
     return stack
 
 
-def process_single_file(input_path: str, output_dir: str, progress: str = "") -> str:
-    """Process single TIF file: load, convert to uint8, and save.
+def process_single_file(input_path: str,
+                        output_dir: str,
+                        progress: str = "",
+                        normalize_method: str = 'minmax',
+                        percentile_low: float = 0.0,
+                        percentile_high: float = 100.0) -> str:
+    """Process single TIF file: load, normalize, convert to uint8, and save.
 
     Args:
         input_path: Path to input TIF file.
         output_dir: Output directory path.
         progress: Optional progress string (e.g., "1/10").
+        normalize_method: Normalization method ('minmax' or 'percentile').
+        percentile_low: Lower percentile for clipping.
+        percentile_high: Upper percentile for clipping.
 
     Returns:
         Path to output file.
@@ -187,7 +237,11 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
     image = load_and_check_tif(input_path)
     logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
-    image_uint8 = normalize_to_uint8(image)
+    normalized = normalize(image,
+                           method=normalize_method,
+                           percentile_low=percentile_low,
+                           percentile_high=percentile_high)
+    image_uint8 = convert_to_uint8(normalized)
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, filename)
@@ -198,17 +252,24 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
     return output_path
 
 
-def process_path(input_path: str, output_dir: str = None) -> None:
+def process_path(input_path: str,
+                 output_dir: str = None,
+                 normalize_method: str = 'minmax',
+                 percentile_low: float = 0.0,
+                 percentile_high: float = 100.0) -> None:
     """Process input path (file or directory) and output corrected TIF files.
 
     Handles three input types:
-    - Single TIF file (2D or 3D)
+    - Single TIF file (3D only, 2D raises error)
     - Directory of 3D TIF files (processed individually)
     - Directory of 2D TIF files (combined into single 3D stack)
 
     Args:
         input_path: Path to TIF file or directory.
         output_dir: Output directory (default: preprocess_output/TIMESTAMP/01_format).
+        normalize_method: Normalization method ('minmax' or 'percentile').
+        percentile_low: Lower percentile for clipping.
+        percentile_high: Upper percentile for clipping.
 
     Raises:
         FileNotFoundError: If input path does not exist.
@@ -226,10 +287,17 @@ def process_path(input_path: str, output_dir: str = None) -> None:
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Input path does not exist: {input_path}")
 
+    # Common normalize kwargs
+    norm_kwargs = {
+        'normalize_method': normalize_method,
+        'percentile_low': percentile_low,
+        'percentile_high': percentile_high,
+    }
+
     if os.path.isfile(input_path):
         if not input_path.lower().endswith(('.tif', '.tiff')):
             raise ValueError(f"Input file is not a TIF file: {input_path}")
-        process_single_file(input_path, output_dir)
+        process_single_file(input_path, output_dir, **norm_kwargs)
 
     elif os.path.isdir(input_path):
         # Try to load as 2D sequence first
@@ -238,7 +306,11 @@ def process_path(input_path: str, output_dir: str = None) -> None:
         if stack is not None:
             # 2D sequence detected, save as single 3D TIF
             logger.info(f"Processing 2D sequence from: {input_path}")
-            image_uint8 = normalize_to_uint8(stack)
+            normalized = normalize(stack,
+                                   method=normalize_method,
+                                   percentile_low=percentile_low,
+                                   percentile_high=percentile_high)
+            image_uint8 = convert_to_uint8(normalized)
 
             os.makedirs(output_dir, exist_ok=True)
             folder_name = os.path.basename(input_path.rstrip('/\\'))
@@ -248,12 +320,11 @@ def process_path(input_path: str, output_dir: str = None) -> None:
             logger.debug(f"  Saved to: {output_path}")
         else:
             # Not a 2D sequence, process each 3D TIF separately
-            tif_files = sorted(
-                [os.path.join(input_path, f)
-                 for f in os.listdir(input_path)
-                 if f.lower().endswith(('.tif', '.tiff'))],
-                key=lambda x: natural_sort_key(os.path.basename(x))
-            )
+            tif_files = natsorted([
+                os.path.join(input_path, f)
+                for f in os.listdir(input_path)
+                if f.lower().endswith(('.tif', '.tiff'))
+            ])
 
             if not tif_files:
                 raise ValueError(f"No TIF files found in directory: {input_path}")
@@ -262,7 +333,9 @@ def process_path(input_path: str, output_dir: str = None) -> None:
 
             for idx, tif_file in enumerate(tif_files, start=1):
                 try:
-                    process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}")
+                    process_single_file(tif_file, output_dir,
+                                        progress=f"{idx}/{len(tif_files)}",
+                                        **norm_kwargs)
                 except Exception as e:
                     logger.error(f"Error processing {tif_file}: {e}")
                     raise
@@ -274,20 +347,60 @@ def process_path(input_path: str, output_dir: str = None) -> None:
 
 def main():
     """CLI entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python check_tif_format.py <input_path> [output_dir]")
-        print("  input_path: TIF file, directory of 3D TIFs, or directory of 2D TIFs (sequence)")
-        print("  output_dir: Optional output directory (default: preprocess_output/YYYYMMDD_HHMMSS/01_format)")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='TIF format validation and conversion utility.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python check_tif_format.py DATA/ori_image/
+  python check_tif_format.py DATA/ori_image/sample.tif
+  python check_tif_format.py DATA/ori_image/ --normalize-method percentile --percentile-low 1 --percentile-high 99
+        """
+    )
+    parser.add_argument('input_path',
+                        help='TIF file, directory of 3D TIFs, or directory of 2D TIFs (sequence)')
+    parser.add_argument('-o', '--output-dir',
+                        help='Output directory (default: preprocess_output/TIMESTAMP/01_format)')
+    parser.add_argument('-c', '--config',
+                        help='Config file path (default: pipeline/preprocess_config.yaml)')
+    parser.add_argument('--normalize-method', choices=['minmax', 'percentile'],
+                        help='Normalization method (overrides config)')
+    parser.add_argument('--percentile-low', type=float,
+                        help='Lower percentile for clipping (overrides config)')
+    parser.add_argument('--percentile-high', type=float,
+                        help='Upper percentile for clipping (overrides config)')
+    parser.add_argument('--log-file',
+                        help='Log file path')
+
+    args = parser.parse_args()
 
     # Setup logging
-    setup_logging()
+    setup_logging(log_file=args.log_file)
 
-    input_path = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    # Load config
+    config_path = args.config or (BASE_DIR / 'pipeline' / 'preprocess_config.yaml')
+    try:
+        config = load_config(config_path, PREPROCESS_SCHEMA)
+        format_config = config.get('format_conversion', {})
+    except FileNotFoundError:
+        logger.warning(f"Config not found: {config_path}, using defaults")
+        format_config = {}
+
+    # Get normalize parameters (CLI overrides config)
+    normalize_method = args.normalize_method or format_config.get('normalize_method', 'minmax')
+    percentile_low = args.percentile_low if args.percentile_low is not None else format_config.get('percentile_low', 0.0)
+    percentile_high = args.percentile_high if args.percentile_high is not None else format_config.get('percentile_high', 100.0)
+
+    logger.info(f"Normalize: method={normalize_method}, percentile=[{percentile_low}, {percentile_high}]")
 
     try:
-        process_path(input_path, output_dir)
+        process_path(
+            args.input_path,
+            args.output_dir,
+            normalize_method=normalize_method,
+            percentile_low=percentile_low,
+            percentile_high=percentile_high,
+        )
         logger.info("Processing completed")
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -299,5 +412,5 @@ if __name__ == '__main__':
 
 
 # python preprocess/check_tif_format.py DATA/ori_image/
-# python preprocess/check_tif_format.py DATA/ori_image/skeleton_roi_32bit.tif
-# python preprocess/check_tif_format.py DATA/2d_sequence_folder/
+# python preprocess/check_tif_format.py DATA/ori_image/skeleton_roi_8bit_z60-630_crop
+# python preprocess/check_tif_format.py DATA/ori_image/skeleton_roi_8bit_z60-630_crop.tif

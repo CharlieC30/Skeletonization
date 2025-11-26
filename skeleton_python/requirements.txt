@@ -4,3 +4,4 @@ scikit-image==0.24.0
 tifffile==2024.8.30
 crackle-codec==0.35.0
 kimimaro==5.6.0
+natsort==8.4.0

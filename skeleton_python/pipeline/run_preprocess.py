@@ -64,7 +64,14 @@ def run_pipeline(
     logger.info("[Step 1/3] Format conversion")
     t0 = time.time()
     format_output = os.path.join(output_dir, '01_format')
-    check_tif_format.process_path(input_path, format_output)
+    format_config = config.get('format_conversion', {})
+    check_tif_format.process_path(
+        input_path,
+        format_output,
+        normalize_method=format_config.get('normalize_method', 'minmax'),
+        percentile_low=format_config.get('percentile_low', 0.0),
+        percentile_high=format_config.get('percentile_high', 100.0),
+    )
     step_times['Format'] = time.time() - t0
 
     # Step 2: Otsu thresholding

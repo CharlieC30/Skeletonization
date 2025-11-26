@@ -1,6 +1,6 @@
 """
-Binary mask cleaning with 3D/2D adaptive filters.
-Recommended workflow: Remove Small Objects → Opening → Closing → Fill Holes
+Binary mask cleaning with 3D morphological filters.
+Workflow: Remove Small Objects -> Opening -> Closing -> Fill Holes
 """
 
 import os
@@ -12,66 +12,35 @@ from pathlib import Path
 
 import numpy as np
 import tifffile
+from natsort import natsorted
 from scipy.ndimage import binary_opening, binary_closing, binary_fill_holes
 from skimage.morphology import remove_small_objects
 
-from pipeline.utils import auto_detect_subdir, setup_logging
+from pipeline.utils import auto_detect_subdir, setup_logging, load_config, PREPROCESS_SCHEMA
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
-def get_structure(image: np.ndarray, radius: int) -> np.ndarray:
-    """Generate structure element based on image dimensions.
+def get_structure_3d(radius: int) -> np.ndarray:
+    """Generate 3D cubic structure element.
 
     Args:
-        image: Input array (used to determine 2D or 3D).
         radius: Radius of structure element.
 
     Returns:
-        2D or 3D array of ones with size (2*radius+1).
-
-    Raises:
-        ValueError: If image is not 2D or 3D.
+        3D array of ones with shape (2*radius+1, 2*radius+1, 2*radius+1).
     """
     size = 2 * radius + 1
-    if image.ndim == 2:
-        return np.ones((size, size))
-    elif image.ndim == 3:
-        return np.ones((size, size, size))
-    else:
-        raise ValueError(f"Unsupported dimensions: {image.ndim}")
-
-
-def get_min_size(image: np.ndarray, min_size_3d: int, min_size_2d: int) -> int:
-    """Select appropriate min_size threshold based on dimensions.
-
-    Args:
-        image: Input array (used to determine 2D or 3D).
-        min_size_3d: Min size for 3D images (voxels).
-        min_size_2d: Min size for 2D images (pixels).
-
-    Returns:
-        Appropriate min_size value.
-
-    Raises:
-        ValueError: If image is not 2D or 3D.
-    """
-    if image.ndim == 2:
-        return min_size_2d
-    elif image.ndim == 3:
-        return min_size_3d
-    else:
-        raise ValueError(f"Unsupported dimensions: {image.ndim}")
+    return np.ones((size, size, size))
 
 
 def clean_mask(
     image: np.ndarray,
     opening_radius: int = 1,
     closing_radius: int = 2,
-    min_size_3d: int = 64,
-    min_size_2d: int = 15,
+    min_size: int = 64,
     skip_remove_small: bool = False,
     skip_fill_holes: bool = False,
 ) -> np.ndarray:
@@ -80,50 +49,54 @@ def clean_mask(
     Workflow: Remove Small Objects -> Opening -> Closing -> Fill Holes
 
     Args:
-        image: Input binary mask.
+        image: Input 3D binary mask with shape (Z, Y, X).
         opening_radius: Radius for opening operation (0 to skip).
         closing_radius: Radius for closing operation (0 to skip).
-        min_size_3d: Min object size for 3D images (voxels).
-        min_size_2d: Min object size for 2D images (pixels).
+        min_size: Min object size in voxels.
         skip_remove_small: Skip remove small objects step.
         skip_fill_holes: Skip fill holes step.
 
     Returns:
         Cleaned binary mask (uint8, values 0 or 255).
+
+    Raises:
+        ValueError: If image is not 3D.
     """
+    if image.ndim != 3:
+        raise ValueError(
+            f"Expected 3D image, got {image.ndim}D. "
+            "Run check_tif_format.py first."
+        )
+
     binary = image > 0
 
     if not skip_remove_small:
-        min_size = get_min_size(binary, min_size_3d, min_size_2d)
-        logger.debug(f"Removing small objects (min_size={min_size}, ndim={binary.ndim})")
+        logger.debug(f"Removing small objects (min_size={min_size})")
         t0 = time.time()
         binary = remove_small_objects(binary, min_size=min_size)
         elapsed = time.time() - t0
         logger.debug(f"  Completed in {elapsed:.1f}s")
 
     if opening_radius > 0:
-        struct = get_structure(binary, opening_radius)
-        logger.debug(f"Applying binary opening (radius={opening_radius}, ndim={binary.ndim})")
+        struct = get_structure_3d(opening_radius)
+        logger.debug(f"Applying binary opening (radius={opening_radius})")
         t0 = time.time()
         binary = binary_opening(binary, structure=struct)
         elapsed = time.time() - t0
         logger.debug(f"  Completed in {elapsed:.1f}s")
 
     if closing_radius > 0:
-        struct = get_structure(binary, closing_radius)
-        logger.debug(f"Applying binary closing (radius={closing_radius}, ndim={binary.ndim})")
+        struct = get_structure_3d(closing_radius)
+        logger.debug(f"Applying binary closing (radius={closing_radius})")
         t0 = time.time()
         binary = binary_closing(binary, structure=struct)
         elapsed = time.time() - t0
         logger.debug(f"  Completed in {elapsed:.1f}s")
 
     if not skip_fill_holes:
-        logger.debug(f"Filling holes (ndim={binary.ndim})")
+        logger.debug("Filling holes")
         t0 = time.time()
-        if binary.ndim == 2:
-            binary = binary_fill_holes(binary)
-        else:
-            binary = binary_fill_holes(binary, structure=np.ones((3, 3, 3)))
+        binary = binary_fill_holes(binary, structure=np.ones((3, 3, 3)))
         elapsed = time.time() - t0
         logger.debug(f"  Completed in {elapsed:.1f}s")
 
@@ -152,10 +125,6 @@ def process_single_file(
     logger.info(f"{progress_prefix}Processing: {filename}")
 
     image = tifffile.imread(input_path)
-
-    if image.ndim not in (2, 3):
-        raise ValueError(f"Unexpected dimensions: {image.ndim}. Expected 2D or 3D.")
-
     logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
     cleaned = clean_mask(image, **kwargs)
@@ -163,11 +132,7 @@ def process_single_file(
     input_name = Path(input_path).stem
     output_path = os.path.join(output_dir, f"{input_name}_cleaned.tif")
 
-    if cleaned.ndim == 3:
-        tifffile.imwrite(output_path, cleaned, imagej=True, metadata={'axes': 'ZYX'})
-    else:
-        tifffile.imwrite(output_path, cleaned)
-
+    tifffile.imwrite(output_path, cleaned, imagej=True, metadata={'axes': 'ZYX'})
     logger.debug(f"  Saved to: {output_path}")
 
     return output_path
@@ -219,13 +184,13 @@ def process_directory(
             # Create 03_cleaned/ in parent directory
             output_dir = str(input_path.parent / '03_cleaned')
 
-    tif_files = [
+    tif_files = natsorted([
         os.path.join(input_dir, f)
         for f in os.listdir(input_dir)
         if f.lower().endswith(('.tif', '.tiff'))
         and '_otsu' in f
         and '_cleaned' not in f
-    ]
+    ])
 
     if not tif_files:
         raise ValueError(f"No *_otsu.tif files found in directory: {input_dir}")
@@ -259,41 +224,41 @@ def process_directory(
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Clean binary masks with adaptive 2D/3D filters',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description='Clean binary masks with morphological filters.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python clean_masks.py preprocess_output/20251117_171518/
+  python clean_masks.py preprocess_output/20251117_171518/ --opening-radius 2 --closing-radius 3
+  python clean_masks.py preprocess_output/20251117_171518/ --min-size 100
+        """
     )
     parser.add_argument(
         'input_dir',
         help='Directory containing *_otsu.tif files (relative to BASE_DIR or absolute)',
     )
     parser.add_argument(
-        '--output-dir',
-        type=str,
+        '-o', '--output-dir',
         help='Output directory (default: auto-detect as 03_cleaned)',
+    )
+    parser.add_argument(
+        '-c', '--config',
+        help='Config file path (default: pipeline/preprocess_config.yaml)',
     )
     parser.add_argument(
         '--opening-radius',
         type=int,
-        default=1,
-        help='Opening radius (0 to skip)',
+        help='Opening radius (0 to skip, overrides config)',
     )
     parser.add_argument(
         '--closing-radius',
         type=int,
-        default=2,
-        help='Closing radius (0 to skip)',
+        help='Closing radius (0 to skip, overrides config)',
     )
     parser.add_argument(
-        '--min-size-3d',
+        '--min-size',
         type=int,
-        default=64,
-        help='Min object size for 3D images (voxels)',
-    )
-    parser.add_argument(
-        '--min-size-2d',
-        type=int,
-        default=15,
-        help='Min object size for 2D images (pixels)',
+        help='Min object size in voxels (overrides config)',
     )
     parser.add_argument(
         '--skip-remove-small',
@@ -312,7 +277,6 @@ def main():
     )
     parser.add_argument(
         '--log-file',
-        type=str,
         help='Path to log file',
     )
 
@@ -321,11 +285,26 @@ def main():
     # Setup logging
     setup_logging(log_file=args.log_file)
 
+    # Load config
+    config_path = args.config or (BASE_DIR / 'pipeline' / 'preprocess_config.yaml')
+    try:
+        config = load_config(config_path, PREPROCESS_SCHEMA)
+        clean_config = config.get('clean_masks', {})
+    except FileNotFoundError:
+        logger.warning(f"Config not found: {config_path}, using defaults")
+        clean_config = {}
+
+    # Get parameters (CLI overrides config)
+    opening_radius = args.opening_radius if args.opening_radius is not None else clean_config.get('opening_radius', 1)
+    closing_radius = args.closing_radius if args.closing_radius is not None else clean_config.get('closing_radius', 2)
+    min_size = args.min_size if args.min_size is not None else clean_config.get('min_size', 64)
+
+    logger.info(f"Parameters: opening_radius={opening_radius}, closing_radius={closing_radius}, min_size={min_size}")
+
     kwargs = {
-        'opening_radius': args.opening_radius,
-        'closing_radius': args.closing_radius,
-        'min_size_3d': args.min_size_3d,
-        'min_size_2d': args.min_size_2d,
+        'opening_radius': opening_radius,
+        'closing_radius': closing_radius,
+        'min_size': min_size,
         'skip_remove_small': args.skip_remove_small,
         'skip_fill_holes': args.skip_fill_holes,
     }
@@ -349,5 +328,5 @@ if __name__ == '__main__':
 
 # python preprocess/clean_masks.py preprocess_output/20251117_171518/
 # python preprocess/clean_masks.py preprocess_output/20251117_171518/ --opening-radius 2 --closing-radius 3
-# python preprocess/clean_masks.py preprocess_output/20251117_171518/ --min-size-3d 100 --min-size-2d 20
+# python preprocess/clean_masks.py preprocess_output/20251117_171518/ --min-size 100
 # python preprocess/clean_masks.py preprocess_output/20251117_171518/ --skip-remove-small

@@ -58,7 +58,7 @@ def run_pipeline(
 
     # Apply CLI overrides
     if cli_overrides:
-        preprocess_keys = ['opening_radius', 'closing_radius', 'min_size_3d', 'min_size_2d']
+        preprocess_keys = ['opening_radius', 'closing_radius', 'min_size']
         for key, value in cli_overrides.items():
             if key in preprocess_keys:
                 preprocess_config['clean_masks'][key] = value
@@ -87,7 +87,14 @@ def run_pipeline(
     logger.info("[Step 1/4] Format conversion")
     t0 = time.time()
     format_output = os.path.join(output_dir, '01_format')
-    check_tif_format.process_path(input_path, format_output)
+    format_config = preprocess_config.get('format_conversion', {})
+    check_tif_format.process_path(
+        input_path,
+        format_output,
+        normalize_method=format_config.get('normalize_method', 'minmax'),
+        percentile_low=format_config.get('percentile_low', 0.0),
+        percentile_high=format_config.get('percentile_high', 100.0),
+    )
     step_times['Format'] = time.time() - t0
 
     # Step 2: Otsu thresholding
@@ -164,13 +171,12 @@ def main():
     )
 
     # CLI overrides
-    parser.add_argument('--opening-radius', type=int)
-    parser.add_argument('--closing-radius', type=int)
-    parser.add_argument('--min-size-3d', type=int)
-    parser.add_argument('--min-size-2d', type=int)
-    parser.add_argument('--dust-threshold', type=int)
-    parser.add_argument('--parallel', type=int)
-    parser.add_argument('--keep-largest-only', action='store_true')
+    parser.add_argument('--opening-radius', type=int, help='Morphological opening radius')
+    parser.add_argument('--closing-radius', type=int, help='Morphological closing radius')
+    parser.add_argument('--min-size', type=int, help='Min object size in voxels')
+    parser.add_argument('--dust-threshold', type=int, help='Skeleton dust threshold')
+    parser.add_argument('--parallel', type=int, help='Number of parallel processes')
+    parser.add_argument('--keep-largest-only', action='store_true', help='Keep only largest component')
 
     args = parser.parse_args()
 
@@ -183,10 +189,8 @@ def main():
         cli_overrides['opening_radius'] = args.opening_radius
     if args.closing_radius is not None:
         cli_overrides['closing_radius'] = args.closing_radius
-    if args.min_size_3d is not None:
-        cli_overrides['min_size_3d'] = args.min_size_3d
-    if args.min_size_2d is not None:
-        cli_overrides['min_size_2d'] = args.min_size_2d
+    if args.min_size is not None:
+        cli_overrides['min_size'] = args.min_size
     if args.dust_threshold is not None:
         cli_overrides['dust_threshold'] = args.dust_threshold
     if args.parallel is not None:

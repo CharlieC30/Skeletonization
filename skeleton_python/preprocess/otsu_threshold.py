@@ -5,14 +5,16 @@ Applies stack histogram mode (single threshold for entire 3D volume).
 
 import os
 import sys
+import argparse
 import logging
 from pathlib import Path
 
 import numpy as np
 import tifffile
+from natsort import natsorted
 from skimage.filters import threshold_otsu
 
-from pipeline.utils import ensure_3d, auto_detect_subdir, setup_logging
+from pipeline.utils import auto_detect_subdir, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +25,40 @@ def compute_stack_otsu_threshold(image: np.ndarray) -> float:
     """Compute single Otsu threshold from entire 3D stack.
 
     Args:
-        image: 2D or 3D numpy array.
+        image: 3D numpy array with shape (Z, Y, X).
 
     Returns:
         Otsu threshold value.
 
     Raises:
-        ValueError: If image is not 2D or 3D.
+        ValueError: If image is not 3D.
     """
-    if image.ndim not in (2, 3):
-        raise ValueError(f"Expected 2D or 3D array, got {image.ndim}D")
+    if image.ndim != 3:
+        raise ValueError(
+            f"Expected 3D image, got {image.ndim}D. "
+            "Run check_tif_format.py first."
+        )
+
+    # Determine histogram range based on dtype
+    if image.dtype == np.uint8:
+        hist_range = (0, 256)
+        bins = 256
+    else:
+        logger.warning(
+            f"Input dtype is {image.dtype}, expected uint8. "
+            "Consider running check_tif_format.py first."
+        )
+        if np.issubdtype(image.dtype, np.integer):
+            info = np.iinfo(image.dtype)
+            hist_range = (info.min, info.max + 1)
+            bins = min(256, info.max - info.min + 1)
+        else:
+            # Float dtype: use actual data range
+            hist_range = (float(image.min()), float(image.max()))
+            bins = 256
 
     # Compute histogram to avoid high memory usage from ravel()
-    counts, _ = np.histogram(image, bins=256, range=(0, 256))
+    counts, _ = np.histogram(image, bins=bins, range=hist_range)
     threshold = threshold_otsu(hist=counts)
     return float(threshold)
 
@@ -71,7 +94,6 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
 
     # Load image (assuming already processed by check_tif_format.py)
     image = tifffile.imread(input_path)
-    image = ensure_3d(image)
 
     logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
@@ -131,12 +153,12 @@ def process_directory(input_dir: str, output_dir: str = None) -> None:
             # Create 02_otsu/ in parent directory
             output_dir = str(input_path.parent / '02_otsu')
 
-    # Find all TIF files
-    tif_files = [
+    # Find all TIF files (naturally sorted)
+    tif_files = natsorted([
         os.path.join(input_dir, f)
         for f in os.listdir(input_dir)
         if f.lower().endswith(('.tif', '.tiff')) and '_otsu' not in f
-    ]
+    ])
 
     if not tif_files:
         raise ValueError(f"No TIF files found in directory: {input_dir}")
@@ -160,20 +182,29 @@ def process_directory(input_dir: str, output_dir: str = None) -> None:
 
 def main():
     """CLI entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python otsu_threshold.py <input_directory> [output_directory]")
-        print("  input_directory: Directory containing TIF files (relative to BASE_DIR or absolute)")
-        print("  output_directory: Optional output directory (default: auto-detect as 02_otsu)")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='Otsu thresholding for TIF stacks.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python otsu_threshold.py preprocess_output/20251117_171518/
+  python otsu_threshold.py preprocess_output/20251117_171518/01_format/ -o output/02_otsu/
+        """
+    )
+    parser.add_argument('input_dir',
+                        help='Directory containing TIF files (relative to BASE_DIR or absolute)')
+    parser.add_argument('-o', '--output-dir',
+                        help='Output directory (default: auto-detect as 02_otsu)')
+    parser.add_argument('--log-file',
+                        help='Log file path')
+
+    args = parser.parse_args()
 
     # Setup logging
-    setup_logging()
-
-    input_dir = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    setup_logging(log_file=args.log_file)
 
     try:
-        process_directory(input_dir, output_dir)
+        process_directory(args.input_dir, args.output_dir)
         logger.info("Processing completed")
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -184,4 +215,4 @@ if __name__ == '__main__':
     main()
 
 
-# python preprocess/otsu_threshold.py preprocess_output/20251117_171518/
+# python preprocess/otsu_threshold.py preprocess_output/20251126_165434

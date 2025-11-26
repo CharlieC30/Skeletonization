@@ -9,9 +9,9 @@ from pathlib import Path
 import numpy as np
 import tifffile
 import kimimaro
+from natsort import natsorted
 
 from pipeline.utils import (
-    ensure_3d,
     auto_detect_subdir,
     extract_timestamp_from_path,
     get_output_dir,
@@ -138,7 +138,11 @@ def process_single_file(
     logger.info(f"{progress_prefix}Processing: {filename}")
 
     image = tifffile.imread(input_path)
-    image = ensure_3d(image)
+    if image.ndim != 3:
+        raise ValueError(
+            f"Expected 3D image, got {image.ndim}D. "
+            "Run check_tif_format.py first."
+        )
 
     logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
@@ -229,12 +233,12 @@ def process_directory(
     if output_dir is None:
         output_dir = get_output_dir(input_dir, str(BASE_DIR / 'output'), '04_skeleton')
 
-    tif_files = [
+    tif_files = natsorted([
         os.path.join(input_dir, f)
         for f in os.listdir(input_dir)
         if f.lower().endswith(('.tif', '.tiff'))
         and '_cleaned' in f
-    ]
+    ])
 
     if not tif_files:
         raise ValueError(f"No *_cleaned.tif files found in directory: {input_dir}")

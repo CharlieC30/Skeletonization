@@ -8,16 +8,19 @@ from pathlib import Path
 from contextlib import contextmanager
 
 import yaml
-import numpy as np
 
 
 # Schema definitions for config validation
 PREPROCESS_SCHEMA = {
+    'format_conversion': {
+        'normalize_method': str,
+        'percentile_low': (int, float),
+        'percentile_high': (int, float),
+    },
     'clean_masks': {
         'opening_radius': int,
         'closing_radius': int,
-        'min_size_3d': int,
-        'min_size_2d': int,
+        'min_size': int,
     },
 }
 
@@ -95,25 +98,6 @@ def validate_schema(config: dict, schema: dict, path: str = "") -> None:
         elif expected is not None and not isinstance(config[key], expected):
             if config[key] is not None:
                 raise ValueError(f"Invalid type for {full_key}: expected {expected.__name__}, got {type(config[key]).__name__}")
-
-
-def ensure_3d(image: np.ndarray) -> np.ndarray:
-    """Ensure image is 3D (Z, Y, X).
-
-    Args:
-        image: Input 2D or 3D array.
-
-    Returns:
-        3D array with shape (Z, Y, X).
-
-    Raises:
-        ValueError: If image is not 2D or 3D.
-    """
-    if image.ndim == 2:
-        return image[np.newaxis, ...]
-    elif image.ndim == 3:
-        return image
-    raise ValueError(f"Expected 2D or 3D, got {image.ndim}D")
 
 
 def auto_detect_subdir(input_dir: str, subdir_name: str) -> str:
