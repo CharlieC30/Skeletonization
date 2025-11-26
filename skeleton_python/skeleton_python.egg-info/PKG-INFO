@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: skeleton_python
+Version: 0.1.0
+Summary: 3D skeleton extraction pipeline for microscopy images
+Requires-Python: >=3.8
+Requires-Dist: numpy>=2.0
+Requires-Dist: scipy>=1.13
+Requires-Dist: scikit-image>=0.24
+Requires-Dist: tifffile>=2024.8
+Requires-Dist: kimimaro>=5.6
+Requires-Dist: pyyaml>=6.0

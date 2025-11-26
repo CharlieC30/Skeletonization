@@ -34,7 +34,9 @@ def compute_stack_otsu_threshold(image: np.ndarray) -> float:
     if image.ndim not in (2, 3):
         raise ValueError(f"Expected 2D or 3D array, got {image.ndim}D")
 
-    threshold = threshold_otsu(image.ravel())
+    # Compute histogram to avoid high memory usage from ravel()
+    counts, _ = np.histogram(image, bins=256, range=(0, 256))
+    threshold = threshold_otsu(hist=counts)
     return float(threshold)
 
 
