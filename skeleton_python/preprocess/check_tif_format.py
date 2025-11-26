@@ -12,6 +12,9 @@ import numpy as np
 import tifffile
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(BASE_DIR))
+
+from pipeline.utils import ensure_3d
 
 
 def load_and_check_tif(path: str) -> np.ndarray:
@@ -77,11 +80,7 @@ def load_and_check_tif(path: str) -> np.ndarray:
                     return image
 
         image = tifffile.imread(path)
-
-        if image.ndim == 2:
-            image = image[np.newaxis, ...]
-        elif image.ndim != 3:
-            raise ValueError(f"Unexpected dimensions: {image.ndim}. Expected 2D or 3D.")
+        image = ensure_3d(image)
 
         print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
         return image

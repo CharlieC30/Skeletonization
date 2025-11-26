@@ -33,6 +33,9 @@ def extract_timestamp_from_path(input_dir: str) -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
+from pipeline.utils import ensure_3d, auto_detect_subdir
+
+
 def load_config_file(config_path: str = None) -> dict:
     """Load configuration from YAML file."""
     from pipeline.utils import load_config
@@ -146,9 +149,7 @@ def process_single_file(
     print(f"Processing {progress_prefix}{input_path}")
 
     image = tifffile.imread(input_path)
-
-    if image.ndim not in (2, 3):
-        raise ValueError(f"Unexpected dimensions: {image.ndim}. Expected 2D or 3D.")
+    image = ensure_3d(image)
 
     print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
 
@@ -216,15 +217,11 @@ def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
     if not os.path.isdir(input_dir):
         raise ValueError(f"Input path is not a directory: {input_dir}")
 
-    # Auto-detect 03_cleaned subdirectory if current dir has no *_cleaned.tif files
-    potential_cleaned_dir = os.path.join(input_dir, '03_cleaned')
-    if os.path.exists(potential_cleaned_dir) and os.path.isdir(potential_cleaned_dir):
-        current_cleaned_tifs = [f for f in os.listdir(input_dir)
-                               if f.lower().endswith(('.tif', '.tiff')) and '_cleaned' in f
-                               and os.path.isfile(os.path.join(input_dir, f))]
-        if not current_cleaned_tifs:
-            input_dir = potential_cleaned_dir
-            print(f"Auto-detected input directory: {input_dir}")
+    # Auto-detect 03_cleaned subdirectory if current dir has no TIF files
+    detected_dir = auto_detect_subdir(input_dir, '03_cleaned')
+    if detected_dir != input_dir:
+        input_dir = detected_dir
+        print(f"Auto-detected input directory: {input_dir}")
 
     # Auto-detect output directory using timestamp extraction
     if output_dir is None:

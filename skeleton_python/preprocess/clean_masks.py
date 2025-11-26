@@ -14,6 +14,9 @@ from scipy.ndimage import binary_opening, binary_closing, binary_fill_holes
 from skimage.morphology import remove_small_objects
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(BASE_DIR))
+
+from pipeline.utils import auto_detect_subdir
 
 
 def get_structure(image: np.ndarray, radius: int) -> np.ndarray:
@@ -189,15 +192,11 @@ def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
     if not os.path.isdir(input_dir):
         raise ValueError(f"Input path is not a directory: {input_dir}")
 
-    # Auto-detect 02_otsu subdirectory if current dir has no *_otsu.tif files
-    potential_otsu_dir = os.path.join(input_dir, '02_otsu')
-    if os.path.exists(potential_otsu_dir) and os.path.isdir(potential_otsu_dir):
-        current_otsu_tifs = [f for f in os.listdir(input_dir)
-                            if f.lower().endswith(('.tif', '.tiff')) and '_otsu' in f
-                            and os.path.isfile(os.path.join(input_dir, f))]
-        if not current_otsu_tifs:
-            input_dir = potential_otsu_dir
-            print(f"Auto-detected input directory: {input_dir}")
+    # Auto-detect 02_otsu subdirectory if current dir has no TIF files
+    detected_dir = auto_detect_subdir(input_dir, '02_otsu')
+    if detected_dir != input_dir:
+        input_dir = detected_dir
+        print(f"Auto-detected input directory: {input_dir}")
 
     # Auto-detect output directory based on input path structure
     if output_dir is None:

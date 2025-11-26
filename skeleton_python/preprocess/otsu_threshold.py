@@ -11,6 +11,9 @@ import tifffile
 from skimage.filters import threshold_otsu
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(BASE_DIR))
+
+from pipeline.utils import ensure_3d, auto_detect_subdir
 
 
 def compute_stack_otsu_threshold(image: np.ndarray) -> float:
@@ -62,12 +65,7 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
 
     # Load image (assuming already processed by check_tif_format.py)
     image = tifffile.imread(input_path)
-
-    # Ensure 3D array
-    if image.ndim == 2:
-        image = image[np.newaxis, ...]
-    elif image.ndim != 3:
-        raise ValueError(f"Unexpected dimensions: {image.ndim}. Expected 2D or 3D.")
+    image = ensure_3d(image)
 
     print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
 
@@ -112,13 +110,10 @@ def process_directory(input_dir: str, output_dir: str = None) -> None:
         raise ValueError(f"Input path is not a directory: {input_dir}")
 
     # Auto-detect 01_format subdirectory if current dir has no TIF files
-    potential_format_dir = os.path.join(input_dir, '01_format')
-    if os.path.exists(potential_format_dir) and os.path.isdir(potential_format_dir):
-        current_tifs = [f for f in os.listdir(input_dir)
-                       if f.lower().endswith(('.tif', '.tiff')) and os.path.isfile(os.path.join(input_dir, f))]
-        if not current_tifs:
-            input_dir = potential_format_dir
-            print(f"Auto-detected input directory: {input_dir}")
+    detected_dir = auto_detect_subdir(input_dir, '01_format')
+    if detected_dir != input_dir:
+        input_dir = detected_dir
+        print(f"Auto-detected input directory: {input_dir}")
 
     # Auto-detect output directory based on input path structure
     if output_dir is None:
