@@ -1,8 +1,0 @@
-{
-  "clean_masks": {
-    "opening_radius": 1,
-    "closing_radius": 2,
-    "min_size_3d": 64,
-    "min_size_2d": 15
-  }
-}

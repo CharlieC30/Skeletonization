@@ -14,7 +14,17 @@ BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
 def compute_stack_otsu_threshold(image: np.ndarray) -> float:
-    """Compute single Otsu threshold from entire 3D stack."""
+    """Compute single Otsu threshold from entire 3D stack.
+
+    Args:
+        image: 2D or 3D numpy array.
+
+    Returns:
+        Otsu threshold value.
+
+    Raises:
+        ValueError: If image is not 2D or 3D.
+    """
     if image.ndim not in (2, 3):
         raise ValueError(f"Expected 2D or 3D array, got {image.ndim}D")
 
@@ -23,13 +33,30 @@ def compute_stack_otsu_threshold(image: np.ndarray) -> float:
 
 
 def apply_threshold(image: np.ndarray, threshold: float) -> np.ndarray:
-    """Apply threshold to create binary mask (0/255)."""
+    """Apply threshold to create binary mask (0/255).
+
+    Args:
+        image: Input numpy array.
+        threshold: Threshold value.
+
+    Returns:
+        Binary uint8 array with values 0 or 255.
+    """
     binary = (image >= threshold).astype(np.uint8) * 255
     return binary
 
 
 def process_single_file(input_path: str, output_dir: str, progress: str = "") -> str:
-    """Process single TIF file: compute Otsu threshold and binarize."""
+    """Process single TIF file: compute Otsu threshold and binarize.
+
+    Args:
+        input_path: Path to input TIF file.
+        output_dir: Output directory path.
+        progress: Optional progress string (e.g., "1/10").
+
+    Returns:
+        Path to output file.
+    """
     progress_prefix = f"{progress}: " if progress else ""
     print(f"Processing {progress_prefix}{input_path}")
 
@@ -63,7 +90,16 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
 
 
 def process_directory(input_dir: str, output_dir: str = None) -> None:
-    """Process all TIF files in directory with Otsu thresholding."""
+    """Process all TIF files in directory with Otsu thresholding.
+
+    Args:
+        input_dir: Input directory containing TIF files.
+        output_dir: Output directory (default: auto-detect as 02_otsu).
+
+    Raises:
+        FileNotFoundError: If input directory does not exist.
+        ValueError: If no TIF files found.
+    """
     input_dir_obj = Path(input_dir)
     if not input_dir_obj.is_absolute():
         input_dir_obj = BASE_DIR / input_dir

@@ -4,6 +4,7 @@ Handles ImageJ virtual stack issues, converts to uint8.
 """
 
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,18 @@ BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
 def load_and_check_tif(path: str) -> np.ndarray:
-    """Load TIF file and handle ImageJ virtual stack format issues."""
+    """Load TIF file and handle ImageJ virtual stack format.
+
+    Args:
+        path: Path to TIF file.
+
+    Returns:
+        3D numpy array with shape (Z, Y, X).
+
+    Raises:
+        FileNotFoundError: If file does not exist.
+        ValueError: If file cannot be read or has invalid dimensions.
+    """
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
 
@@ -79,7 +91,14 @@ def load_and_check_tif(path: str) -> np.ndarray:
 
 
 def normalize_to_uint8(array: np.ndarray) -> np.ndarray:
-    """Convert array to uint8 with linear scaling."""
+    """Convert array to uint8 with linear scaling.
+
+    Args:
+        array: Input numpy array of any numeric dtype.
+
+    Returns:
+        uint8 numpy array scaled to [0, 255].
+    """
     if array.dtype == np.uint8:
         return array
 
@@ -93,8 +112,72 @@ def normalize_to_uint8(array: np.ndarray) -> np.ndarray:
     return scaled.astype(np.uint8)
 
 
+def natural_sort_key(filename: str) -> list:
+    """Generate sort key for natural numeric ordering.
+
+    Args:
+        filename: Filename string to generate key for.
+
+    Returns:
+        List of string and int parts for sorting.
+    """
+    return [int(c) if c.isdigit() else c.lower()
+            for c in re.split(r'(\d+)', filename)]
+
+
+def load_2d_sequence(folder_path: str) -> np.ndarray:
+    """Load folder of 2D TIFs as 3D stack, sorted by numeric order.
+
+    Args:
+        folder_path: Path to folder containing 2D TIF files.
+
+    Returns:
+        3D numpy array with shape (Z, Y, X), or None if not a 2D sequence.
+
+    Raises:
+        ValueError: If no TIF files found or mixed dimensions detected.
+    """
+    tif_files = [f for f in os.listdir(folder_path)
+                 if f.lower().endswith(('.tif', '.tiff'))]
+    tif_files = sorted(tif_files, key=natural_sort_key)
+
+    if not tif_files:
+        raise ValueError(f"No TIF files found in {folder_path}")
+
+    # Check if first file is 2D
+    first_path = os.path.join(folder_path, tif_files[0])
+    first = tifffile.imread(first_path)
+    if first.ndim != 2:
+        return None  # Not a 2D sequence, use existing logic
+
+    print(f"  Detected 2D sequence ({len(tif_files)} files)")
+
+    # Stack all slices
+    slices = [first]
+    for f in tif_files[1:]:
+        img = tifffile.imread(os.path.join(folder_path, f))
+        if img.ndim != 2:
+            raise ValueError(f"Mixed dimensions in sequence: {f}")
+        if img.shape != first.shape:
+            raise ValueError(f"Shape mismatch: {f} has {img.shape}, expected {first.shape}")
+        slices.append(img)
+
+    stack = np.stack(slices, axis=0)
+    print(f"  Loaded shape {stack.shape}, dtype {stack.dtype}")
+    return stack
+
+
 def process_single_file(input_path: str, output_dir: str, progress: str = "") -> str:
-    """Process single TIF file: load, convert to uint8, and save."""
+    """Process single TIF file: load, convert to uint8, and save.
+
+    Args:
+        input_path: Path to input TIF file.
+        output_dir: Output directory path.
+        progress: Optional progress string (e.g., "1/10").
+
+    Returns:
+        Path to output file.
+    """
     progress_prefix = f"{progress}: " if progress else ""
     print(f"Processing {progress_prefix}{input_path}")
 
@@ -111,7 +194,21 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
 
 
 def process_path(input_path: str, output_dir: str = None) -> None:
-    """Process input path (file or directory) and output corrected TIF files."""
+    """Process input path (file or directory) and output corrected TIF files.
+
+    Handles three input types:
+    - Single TIF file (2D or 3D)
+    - Directory of 3D TIF files (processed individually)
+    - Directory of 2D TIF files (combined into single 3D stack)
+
+    Args:
+        input_path: Path to TIF file or directory.
+        output_dir: Output directory (default: preprocess_output/TIMESTAMP/01_format).
+
+    Raises:
+        FileNotFoundError: If input path does not exist.
+        ValueError: If no TIF files found or invalid input.
+    """
     input_path_obj = Path(input_path)
     if not input_path_obj.is_absolute():
         input_path_obj = BASE_DIR / input_path
@@ -130,25 +227,42 @@ def process_path(input_path: str, output_dir: str = None) -> None:
         process_single_file(input_path, output_dir)
 
     elif os.path.isdir(input_path):
-        tif_files = [
-            os.path.join(input_path, f)
-            for f in os.listdir(input_path)
-            if f.lower().endswith(('.tif', '.tiff'))
-        ]
+        # Try to load as 2D sequence first
+        stack = load_2d_sequence(input_path)
 
-        if not tif_files:
-            raise ValueError(f"No TIF files found in directory: {input_path}")
+        if stack is not None:
+            # 2D sequence detected, save as single 3D TIF
+            print(f"Processing 2D sequence from: {input_path}")
+            image_uint8 = normalize_to_uint8(stack)
 
-        print(f"Found {len(tif_files)} TIF files in directory")
+            os.makedirs(output_dir, exist_ok=True)
+            folder_name = os.path.basename(input_path.rstrip('/\\'))
+            output_path = os.path.join(output_dir, f"{folder_name}.tif")
 
-        for idx, tif_file in enumerate(tif_files, start=1):
-            try:
-                process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}")
-            except Exception as e:
-                print(f"Error processing {tif_file}: {e}")
-                raise
+            tifffile.imwrite(output_path, image_uint8, imagej=True, metadata={'axes': 'ZYX'})
+            print(f"  Saved to: {output_path}")
+        else:
+            # Not a 2D sequence, process each 3D TIF separately
+            tif_files = sorted(
+                [os.path.join(input_path, f)
+                 for f in os.listdir(input_path)
+                 if f.lower().endswith(('.tif', '.tiff'))],
+                key=lambda x: natural_sort_key(os.path.basename(x))
+            )
 
-        print(f"Completed processing {len(tif_files)} files")
+            if not tif_files:
+                raise ValueError(f"No TIF files found in directory: {input_path}")
+
+            print(f"Found {len(tif_files)} TIF files in directory")
+
+            for idx, tif_file in enumerate(tif_files, start=1):
+                try:
+                    process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}")
+                except Exception as e:
+                    print(f"Error processing {tif_file}: {e}")
+                    raise
+
+            print(f"Completed processing {len(tif_files)} files")
     else:
         raise ValueError(f"Input path is neither file nor directory: {input_path}")
 
@@ -157,7 +271,7 @@ def main():
     """CLI entry point."""
     if len(sys.argv) < 2:
         print("Usage: python check_tif_format.py <input_path> [output_dir]")
-        print("  input_path: TIF file or directory (relative to BASE_DIR or absolute)")
+        print("  input_path: TIF file, directory of 3D TIFs, or directory of 2D TIFs (sequence)")
         print("  output_dir: Optional output directory (default: preprocess_output/YYYYMMDD_HHMMSS/01_format)")
         sys.exit(1)
 
@@ -178,3 +292,4 @@ if __name__ == '__main__':
 
 # python preprocess/check_tif_format.py DATA/ori_image/
 # python preprocess/check_tif_format.py DATA/ori_image/skeleton_roi_32bit.tif
+# python preprocess/check_tif_format.py DATA/2d_sequence_folder/

@@ -1,0 +1,7 @@
+# Preprocessing configuration
+
+clean_masks:
+  opening_radius: 1      # morphological opening radius
+  closing_radius: 2      # morphological closing radius
+  min_size_3d: 64        # minimum 3D object size (voxels)
+  min_size_2d: 15        # minimum 2D object size (pixels)

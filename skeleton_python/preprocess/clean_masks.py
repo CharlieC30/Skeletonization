@@ -17,7 +17,18 @@ BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
 def get_structure(image: np.ndarray, radius: int) -> np.ndarray:
-    """Generate structure element based on image dimensions."""
+    """Generate structure element based on image dimensions.
+
+    Args:
+        image: Input array (used to determine 2D or 3D).
+        radius: Radius of structure element.
+
+    Returns:
+        2D or 3D array of ones with size (2*radius+1).
+
+    Raises:
+        ValueError: If image is not 2D or 3D.
+    """
     size = 2 * radius + 1
     if image.ndim == 2:
         return np.ones((size, size))
@@ -28,7 +39,19 @@ def get_structure(image: np.ndarray, radius: int) -> np.ndarray:
 
 
 def get_min_size(image: np.ndarray, min_size_3d: int, min_size_2d: int) -> int:
-    """Select appropriate min_size threshold based on dimensions."""
+    """Select appropriate min_size threshold based on dimensions.
+
+    Args:
+        image: Input array (used to determine 2D or 3D).
+        min_size_3d: Min size for 3D images (voxels).
+        min_size_2d: Min size for 2D images (pixels).
+
+    Returns:
+        Appropriate min_size value.
+
+    Raises:
+        ValueError: If image is not 2D or 3D.
+    """
     if image.ndim == 2:
         return min_size_2d
     elif image.ndim == 3:
@@ -46,14 +69,21 @@ def clean_mask(
     skip_remove_small: bool = False,
     skip_fill_holes: bool = False,
 ) -> np.ndarray:
-    """
-    Clean binary mask with recommended workflow.
+    """Clean binary mask with morphological operations.
 
-    Steps:
-    1. Remove Small Objects (3D connected component analysis)
-    2. Binary Opening (remove small protrusions)
-    3. Binary Closing (fill small gaps)
-    4. Fill Holes (fill enclosed regions)
+    Workflow: Remove Small Objects -> Opening -> Closing -> Fill Holes
+
+    Args:
+        image: Input binary mask.
+        opening_radius: Radius for opening operation (0 to skip).
+        closing_radius: Radius for closing operation (0 to skip).
+        min_size_3d: Min object size for 3D images (voxels).
+        min_size_2d: Min object size for 2D images (pixels).
+        skip_remove_small: Skip remove small objects step.
+        skip_fill_holes: Skip fill holes step.
+
+    Returns:
+        Cleaned binary mask (uint8, values 0 or 255).
     """
     binary = image > 0
 
@@ -100,7 +130,17 @@ def process_single_file(
     progress: str = "",
     **kwargs,
 ) -> str:
-    """Process single TIF file with cleaning operations."""
+    """Process single TIF file with cleaning operations.
+
+    Args:
+        input_path: Path to input TIF file.
+        output_dir: Output directory path.
+        progress: Optional progress string (e.g., "1/10").
+        **kwargs: Arguments passed to clean_mask().
+
+    Returns:
+        Path to output file.
+    """
     progress_prefix = f"{progress}: " if progress else ""
     print(f"Processing {progress_prefix}{input_path}")
 
@@ -127,7 +167,17 @@ def process_single_file(
 
 
 def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
-    """Process all *_otsu.tif files in directory."""
+    """Process all *_otsu.tif files in directory.
+
+    Args:
+        input_dir: Input directory containing *_otsu.tif files.
+        output_dir: Output directory (default: auto-detect as 03_cleaned).
+        **kwargs: Arguments passed to clean_mask().
+
+    Raises:
+        FileNotFoundError: If input directory does not exist.
+        ValueError: If no *_otsu.tif files found.
+    """
     input_dir_obj = Path(input_dir)
     if not input_dir_obj.is_absolute():
         input_dir_obj = BASE_DIR / input_dir

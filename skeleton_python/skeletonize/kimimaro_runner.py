@@ -1,12 +1,7 @@
-"""
-3D skeletonization using Kimimaro algorithm.
-Processes cleaned binary masks to generate centerline skeletons.
-"""
-
+"""3D skeletonization using Kimimaro algorithm."""
 import os
 import sys
 import argparse
-import json
 import re
 import time
 from pathlib import Path
@@ -16,6 +11,8 @@ import tifffile
 import kimimaro
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
+DEFAULT_CONFIG = BASE_DIR / 'pipeline' / 'skeleton_config.yaml'
+sys.path.insert(0, str(BASE_DIR))
 
 
 def extract_timestamp_from_path(input_dir: str) -> str:
@@ -37,20 +34,13 @@ def extract_timestamp_from_path(input_dir: str) -> str:
 
 
 def load_config_file(config_path: str = None) -> dict:
-    """Load configuration from JSON file."""
+    """Load configuration from YAML file."""
+    from pipeline.config_utils import load_config
+
     if config_path is None:
-        # Default config path
-        config_path = BASE_DIR / 'pipeline' / 'skeleton_config.json'
+        config_path = DEFAULT_CONFIG
 
-    if not os.path.exists(config_path):
-        return {}
-
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"Warning: Invalid JSON in config file: {e}")
-        return {}
+    return load_config(config_path)
 
 
 def skeletonize_mask(
@@ -290,7 +280,7 @@ def main():
     parser.add_argument(
         '--config',
         type=str,
-        help='Path to JSON config file (default: pipeline/skeleton_config.json)',
+        help='Path to config file (YAML)',
     )
 
     # Kimimaro TEASAR parameters
@@ -444,5 +434,5 @@ if __name__ == '__main__':
 
 # python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/
 # python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/ --dust-threshold 1000
-# python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/ --config pipeline/skeleton_config.json
+# python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/ --config pipeline/skeleton_config.yaml
 # python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/03_cleaned/ --parallel 2
