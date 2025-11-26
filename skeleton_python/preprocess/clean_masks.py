@@ -7,6 +7,7 @@ import os
 import sys
 import argparse
 import time
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -15,6 +16,8 @@ from scipy.ndimage import binary_opening, binary_closing, binary_fill_holes
 from skimage.morphology import remove_small_objects
 
 from pipeline.utils import auto_detect_subdir, setup_logging
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
 
@@ -92,37 +95,37 @@ def clean_mask(
 
     if not skip_remove_small:
         min_size = get_min_size(binary, min_size_3d, min_size_2d)
-        print(f"  Removing small objects (min_size={min_size}, ndim={binary.ndim})")
+        logger.debug(f"Removing small objects (min_size={min_size}, ndim={binary.ndim})")
         t0 = time.time()
         binary = remove_small_objects(binary, min_size=min_size)
         elapsed = time.time() - t0
-        print(f"  └─ Completed in {elapsed:.1f}s")
+        logger.debug(f"  Completed in {elapsed:.1f}s")
 
     if opening_radius > 0:
         struct = get_structure(binary, opening_radius)
-        print(f"  Applying binary opening (radius={opening_radius}, ndim={binary.ndim})")
+        logger.debug(f"Applying binary opening (radius={opening_radius}, ndim={binary.ndim})")
         t0 = time.time()
         binary = binary_opening(binary, structure=struct)
         elapsed = time.time() - t0
-        print(f"  └─ Completed in {elapsed:.1f}s")
+        logger.debug(f"  Completed in {elapsed:.1f}s")
 
     if closing_radius > 0:
         struct = get_structure(binary, closing_radius)
-        print(f"  Applying binary closing (radius={closing_radius}, ndim={binary.ndim})")
+        logger.debug(f"Applying binary closing (radius={closing_radius}, ndim={binary.ndim})")
         t0 = time.time()
         binary = binary_closing(binary, structure=struct)
         elapsed = time.time() - t0
-        print(f"  └─ Completed in {elapsed:.1f}s")
+        logger.debug(f"  Completed in {elapsed:.1f}s")
 
     if not skip_fill_holes:
-        print(f"  Filling holes (ndim={binary.ndim})")
+        logger.debug(f"Filling holes (ndim={binary.ndim})")
         t0 = time.time()
         if binary.ndim == 2:
             binary = binary_fill_holes(binary)
         else:
             binary = binary_fill_holes(binary, structure=np.ones((3, 3, 3)))
         elapsed = time.time() - t0
-        print(f"  └─ Completed in {elapsed:.1f}s")
+        logger.debug(f"  Completed in {elapsed:.1f}s")
 
     return binary.astype(np.uint8) * 255
 
@@ -144,15 +147,16 @@ def process_single_file(
     Returns:
         Path to output file.
     """
-    progress_prefix = f"{progress}: " if progress else ""
-    print(f"Processing {progress_prefix}{input_path}")
+    filename = os.path.basename(input_path)
+    progress_prefix = f"[{progress}] " if progress else ""
+    logger.info(f"{progress_prefix}Processing: {filename}")
 
     image = tifffile.imread(input_path)
 
     if image.ndim not in (2, 3):
         raise ValueError(f"Unexpected dimensions: {image.ndim}. Expected 2D or 3D.")
 
-    print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
+    logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
     cleaned = clean_mask(image, **kwargs)
 
@@ -164,7 +168,7 @@ def process_single_file(
     else:
         tifffile.imwrite(output_path, cleaned)
 
-    print(f"  Saved to: {output_path}")
+    logger.debug(f"  Saved to: {output_path}")
 
     return output_path
 
@@ -187,8 +191,6 @@ def process_directory(
         FileNotFoundError: If input directory does not exist.
         ValueError: If no *_otsu.tif files found.
     """
-    import logging
-    logger = logging.getLogger(__name__)
 
     input_dir_obj = Path(input_dir)
     if not input_dir_obj.is_absolute():
@@ -205,7 +207,7 @@ def process_directory(
     detected_dir = auto_detect_subdir(input_dir, '02_otsu')
     if detected_dir != input_dir:
         input_dir = detected_dir
-        print(f"Auto-detected input directory: {input_dir}")
+        logger.info(f"Auto-detected input directory: {input_dir}")
 
     # Auto-detect output directory based on input path structure
     if output_dir is None:
@@ -228,8 +230,8 @@ def process_directory(
     if not tif_files:
         raise ValueError(f"No *_otsu.tif files found in directory: {input_dir}")
 
-    print(f"Found {len(tif_files)} TIF files in directory")
-    print(f"Output directory: {output_dir}")
+    logger.info(f"Found {len(tif_files)} TIF files in directory")
+    logger.info(f"Output directory: {output_dir}")
 
     # Create output directory before processing
     os.makedirs(output_dir, exist_ok=True)
@@ -246,7 +248,7 @@ def process_directory(
 
     # Report results
     successful = len(tif_files) - len(failed_files)
-    print(f"Completed processing {successful}/{len(tif_files)} files")
+    logger.info(f"Completed processing {successful}/{len(tif_files)} files")
 
     if failed_files:
         logger.warning(f"Failed files ({len(failed_files)}):")
@@ -335,9 +337,9 @@ def main():
             continue_on_error=args.continue_on_error,
             **kwargs
         )
-        print("Processing completed")
+        logger.info("Processing completed")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
 
 

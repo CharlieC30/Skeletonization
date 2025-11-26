@@ -5,13 +5,16 @@ Applies stack histogram mode (single threshold for entire 3D volume).
 
 import os
 import sys
+import logging
 from pathlib import Path
 
 import numpy as np
 import tifffile
 from skimage.filters import threshold_otsu
 
-from pipeline.utils import ensure_3d, auto_detect_subdir
+from pipeline.utils import ensure_3d, auto_detect_subdir, setup_logging
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
 
@@ -60,18 +63,19 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
     Returns:
         Path to output file.
     """
-    progress_prefix = f"{progress}: " if progress else ""
-    print(f"Processing {progress_prefix}{input_path}")
+    filename = os.path.basename(input_path)
+    progress_prefix = f"[{progress}] " if progress else ""
+    logger.info(f"{progress_prefix}Processing: {filename}")
 
     # Load image (assuming already processed by check_tif_format.py)
     image = tifffile.imread(input_path)
     image = ensure_3d(image)
 
-    print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
+    logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
     # Compute Otsu threshold on entire stack
     threshold = compute_stack_otsu_threshold(image)
-    print(f"  Otsu threshold: {threshold:.2f}")
+    logger.debug(f"  Otsu threshold: {threshold:.2f}")
 
     # Apply threshold
     binary = apply_threshold(image, threshold)
@@ -82,7 +86,7 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
 
     # Save binary mask
     tifffile.imwrite(output_path, binary, imagej=True, metadata={'axes': 'ZYX'})
-    print(f"  Saved to: {output_path}")
+    logger.debug(f"  Saved to: {output_path}")
 
     return output_path
 
@@ -113,7 +117,7 @@ def process_directory(input_dir: str, output_dir: str = None) -> None:
     detected_dir = auto_detect_subdir(input_dir, '01_format')
     if detected_dir != input_dir:
         input_dir = detected_dir
-        print(f"Auto-detected input directory: {input_dir}")
+        logger.info(f"Auto-detected input directory: {input_dir}")
 
     # Auto-detect output directory based on input path structure
     if output_dir is None:
@@ -135,8 +139,8 @@ def process_directory(input_dir: str, output_dir: str = None) -> None:
     if not tif_files:
         raise ValueError(f"No TIF files found in directory: {input_dir}")
 
-    print(f"Found {len(tif_files)} TIF files in directory")
-    print(f"Output directory: {output_dir}")
+    logger.info(f"Found {len(tif_files)} TIF files in directory")
+    logger.info(f"Output directory: {output_dir}")
 
     # Create output directory before processing
     os.makedirs(output_dir, exist_ok=True)
@@ -146,10 +150,10 @@ def process_directory(input_dir: str, output_dir: str = None) -> None:
         try:
             process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}")
         except Exception as e:
-            print(f"Error processing {tif_file}: {e}")
+            logger.error(f"Error processing {tif_file}: {e}")
             raise
 
-    print(f"Completed processing {len(tif_files)} files")
+    logger.info(f"Completed processing {len(tif_files)} files")
 
 
 def main():
@@ -160,14 +164,17 @@ def main():
         print("  output_directory: Optional output directory (default: auto-detect as 02_otsu)")
         sys.exit(1)
 
+    # Setup logging
+    setup_logging()
+
     input_dir = sys.argv[1]
     output_dir = sys.argv[2] if len(sys.argv) > 2 else None
 
     try:
         process_directory(input_dir, output_dir)
-        print("Processing completed")
+        logger.info("Processing completed")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
 
 

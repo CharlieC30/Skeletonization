@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import time
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,8 @@ from pipeline.utils import (
     setup_logging,
     SKELETON_SCHEMA,
 )
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
 DEFAULT_CONFIG = BASE_DIR / 'pipeline' / 'skeleton_config.yaml'
@@ -80,13 +83,13 @@ def skeletonize_mask(
         parallel=parallel,
     )
     elapsed = time.time() - t0
-    print(f"  └─ Skeletonization completed in {elapsed:.1f}s")
+    logger.debug(f"Skeletonization completed in {elapsed:.1f}s")
 
     if len(skels) == 0:
         return {}
 
     # Postprocessing
-    print(f"  Postprocessing skeletons")
+    logger.debug("Postprocessing skeletons")
     t0 = time.time()
     skels_filtered = {}
     for label_id, skel in skels.items():
@@ -103,19 +106,19 @@ def skeletonize_mask(
         if keep_largest_component_only:
             components = skel.components()
             if len(components) > 1:
-                print(f"    Label {label_id}: {len(components)} components, keeping largest")
+                logger.debug(f"  Label {label_id}: {len(components)} components, keeping largest")
                 skel = max(components, key=lambda c: c.cable_length())
             elif len(components) == 1:
                 skel = components[0]
 
         filtered_vertices = len(skel.vertices)
         if filtered_vertices < original_vertices:
-            print(f"    Label {label_id}: filtered {original_vertices} -> {filtered_vertices} vertices")
+            logger.debug(f"  Label {label_id}: filtered {original_vertices} -> {filtered_vertices} vertices")
 
         skels_filtered[label_id] = skel
 
     elapsed = time.time() - t0
-    print(f"  └─ Postprocessing completed in {elapsed:.1f}s")
+    logger.debug(f"Postprocessing completed in {elapsed:.1f}s")
 
     return skels_filtered
 
@@ -130,19 +133,20 @@ def process_single_file(
     # Extract kimimaro's progress parameter (passed as 'kimimaro_progress' to avoid conflict)
     kimimaro_progress = kwargs.pop('kimimaro_progress', True)
 
-    progress_prefix = f"{progress}: " if progress else ""
-    print(f"Processing {progress_prefix}{input_path}")
+    filename = os.path.basename(input_path)
+    progress_prefix = f"[{progress}] " if progress else ""
+    logger.info(f"{progress_prefix}Processing: {filename}")
 
     image = tifffile.imread(input_path)
     image = ensure_3d(image)
 
-    print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
+    logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
 
-    print(f"  Running Kimimaro skeletonization")
+    logger.debug("Running Kimimaro skeletonization")
     skels = skeletonize_mask(image, progress=kimimaro_progress, **kwargs)
 
     if len(skels) == 0:
-        print(f"  Warning: No skeletons generated")
+        logger.warning("No skeletons generated")
         return output_dir
 
     # Create output directory
@@ -163,7 +167,7 @@ def process_single_file(
             with open(swc_file, 'w') as f:
                 f.write(swc_content)
         except Exception as e:
-            print(f"    Warning: Failed to save SWC: {e}")
+            logger.warning(f"Failed to save SWC: {e}")
 
         # Save TIF visualization
         tif_file = os.path.join(output_dir, f'{input_name}_label_{label_id}.tif')
@@ -183,8 +187,8 @@ def process_single_file(
         else:
             tifffile.imwrite(tif_file, skeleton_img)
 
-    print(f"  Generated {len(skels)} skeleton(s), {total_vertices} vertices, {total_edges} edges")
-    print(f"  Saved to: {output_dir}")
+    logger.debug(f"  Generated {len(skels)} skeleton(s), {total_vertices} vertices, {total_edges} edges")
+    logger.debug(f"  Saved to: {output_dir}")
 
     return output_dir
 
@@ -203,8 +207,6 @@ def process_directory(
         continue_on_error: If True, continue processing on file errors.
         **kwargs: Arguments passed to process_single_file.
     """
-    import logging
-    logger = logging.getLogger(__name__)
 
     input_dir_obj = Path(input_dir)
     if not input_dir_obj.is_absolute():
@@ -221,7 +223,7 @@ def process_directory(
     detected_dir = auto_detect_subdir(input_dir, '03_cleaned')
     if detected_dir != input_dir:
         input_dir = detected_dir
-        print(f"Auto-detected input directory: {input_dir}")
+        logger.info(f"Auto-detected input directory: {input_dir}")
 
     # Auto-detect output directory using timestamp extraction
     if output_dir is None:
@@ -237,8 +239,8 @@ def process_directory(
     if not tif_files:
         raise ValueError(f"No *_cleaned.tif files found in directory: {input_dir}")
 
-    print(f"Found {len(tif_files)} TIF files in directory")
-    print(f"Output directory: {output_dir}")
+    logger.info(f"Found {len(tif_files)} TIF files in directory")
+    logger.info(f"Output directory: {output_dir}")
 
     # Create output directory before processing
     os.makedirs(output_dir, exist_ok=True)
@@ -259,7 +261,7 @@ def process_directory(
 
     # Report results
     successful = len(tif_files) - len(failed_files)
-    print(f"Completed processing {successful}/{len(tif_files)} files")
+    logger.info(f"Completed processing {successful}/{len(tif_files)} files")
 
     if failed_files:
         logger.warning(f"Failed files ({len(failed_files)}):")
@@ -407,9 +409,9 @@ def main():
             continue_on_error=args.continue_on_error,
             **config
         )
-        print("Processing completed")
+        logger.info("Processing completed")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
 
 

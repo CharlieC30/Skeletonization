@@ -1,9 +1,11 @@
 """Pipeline utilities."""
 import os
 import re
+import time
 import logging
 from datetime import datetime
 from pathlib import Path
+from contextlib import contextmanager
 
 import yaml
 import numpy as np
@@ -225,3 +227,62 @@ def setup_logging(log_file: str = None, level: int = logging.INFO) -> logging.Lo
         force=True,
     )
     return logging.getLogger(__name__)
+
+
+@contextmanager
+def timer(description: str, logger: logging.Logger = None):
+    """Context manager for timing code blocks.
+
+    Args:
+        description: Description of the operation being timed.
+        logger: Optional logger instance. If None, uses print.
+
+    Yields:
+        None
+
+    Example:
+        with timer("Processing image", logger):
+            result = process(image)
+    """
+    start = time.time()
+    yield
+    elapsed = time.time() - start
+    msg = f"{description}: {elapsed:.1f}s"
+    if logger:
+        logger.info(msg)
+    else:
+        print(msg)
+
+
+def format_duration(seconds: float) -> str:
+    """Format duration in human-readable format.
+
+    Args:
+        seconds: Duration in seconds.
+
+    Returns:
+        Formatted string like "1m 23s" or "45.2s".
+    """
+    if seconds >= 60:
+        minutes = int(seconds // 60)
+        secs = seconds % 60
+        return f"{minutes}m {secs:.0f}s"
+    return f"{seconds:.1f}s"
+
+
+def log_config(config: dict, logger: logging.Logger, title: str = "Configuration"):
+    """Log configuration parameters in formatted output.
+
+    Args:
+        config: Configuration dictionary to log.
+        logger: Logger instance.
+        title: Title for the configuration block.
+    """
+    logger.info(f"{title}:")
+    for key, value in config.items():
+        if isinstance(value, dict):
+            logger.info(f"  {key}:")
+            for k, v in value.items():
+                logger.info(f"    {k}: {v}")
+        else:
+            logger.info(f"  {key}: {value}")

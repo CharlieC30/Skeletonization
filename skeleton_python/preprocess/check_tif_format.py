@@ -6,13 +6,16 @@ Handles ImageJ virtual stack issues, converts to uint8.
 import os
 import re
 import sys
+import logging
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import tifffile
 
-from pipeline.utils import ensure_3d
+from pipeline.utils import ensure_3d, setup_logging
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent.resolve()
 
@@ -44,7 +47,7 @@ def load_and_check_tif(path: str) -> np.ndarray:
 
                 # ImageJ virtual stack: single page but metadata indicates multiple slices
                 if num_pages == 1 and expected_slices > 1:
-                    print(f"  Detected ImageJ virtual stack ({expected_slices} slices)")
+                    logger.debug(f"Detected ImageJ virtual stack ({expected_slices} slices)")
 
                     page = tif.pages[0]
                     height, width = page.shape
@@ -76,13 +79,13 @@ def load_and_check_tif(path: str) -> np.ndarray:
                     if image.dtype.byteorder == '>':
                         image = image.astype(image.dtype.newbyteorder('='))
 
-                    print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
+                    logger.debug(f"Loaded shape {image.shape}, dtype {image.dtype}")
                     return image
 
         image = tifffile.imread(path)
         image = ensure_3d(image)
 
-        print(f"  Loaded shape {image.shape}, dtype {image.dtype}")
+        logger.debug(f"Loaded shape {image.shape}, dtype {image.dtype}")
         return image
 
     except Exception as e:
@@ -107,7 +110,7 @@ def normalize_to_uint8(array: np.ndarray) -> np.ndarray:
         return np.zeros_like(array, dtype=np.uint8)
 
     scaled = (array.astype(np.float64) - arr_min) / (arr_max - arr_min) * 255
-    print(f"  Converted to uint8 (scaled from range [{arr_min:.2f}, {arr_max:.2f}])")
+    logger.debug(f"Converted to uint8 (scaled from range [{arr_min:.2f}, {arr_max:.2f}])")
     return scaled.astype(np.uint8)
 
 
@@ -149,7 +152,7 @@ def load_2d_sequence(folder_path: str) -> np.ndarray:
     if first.ndim != 2:
         return None  # Not a 2D sequence, use existing logic
 
-    print(f"  Detected 2D sequence ({len(tif_files)} files)")
+    logger.debug(f"Detected 2D sequence ({len(tif_files)} files)")
 
     # Stack all slices
     slices = [first]
@@ -162,7 +165,7 @@ def load_2d_sequence(folder_path: str) -> np.ndarray:
         slices.append(img)
 
     stack = np.stack(slices, axis=0)
-    print(f"  Loaded shape {stack.shape}, dtype {stack.dtype}")
+    logger.debug(f"Loaded shape {stack.shape}, dtype {stack.dtype}")
     return stack
 
 
@@ -177,17 +180,20 @@ def process_single_file(input_path: str, output_dir: str, progress: str = "") ->
     Returns:
         Path to output file.
     """
-    progress_prefix = f"{progress}: " if progress else ""
-    print(f"Processing {progress_prefix}{input_path}")
+    filename = os.path.basename(input_path)
+    progress_prefix = f"[{progress}] " if progress else ""
+    logger.info(f"{progress_prefix}Processing: {filename}")
 
     image = load_and_check_tif(input_path)
+    logger.debug(f"  Shape: {image.shape}, dtype: {image.dtype}")
+
     image_uint8 = normalize_to_uint8(image)
 
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, os.path.basename(input_path))
+    output_path = os.path.join(output_dir, filename)
 
     tifffile.imwrite(output_path, image_uint8, imagej=True, metadata={'axes': 'ZYX'})
-    print(f"  Saved to: {output_path}")
+    logger.debug(f"  Saved to: {output_path}")
 
     return output_path
 
@@ -231,7 +237,7 @@ def process_path(input_path: str, output_dir: str = None) -> None:
 
         if stack is not None:
             # 2D sequence detected, save as single 3D TIF
-            print(f"Processing 2D sequence from: {input_path}")
+            logger.info(f"Processing 2D sequence from: {input_path}")
             image_uint8 = normalize_to_uint8(stack)
 
             os.makedirs(output_dir, exist_ok=True)
@@ -239,7 +245,7 @@ def process_path(input_path: str, output_dir: str = None) -> None:
             output_path = os.path.join(output_dir, f"{folder_name}.tif")
 
             tifffile.imwrite(output_path, image_uint8, imagej=True, metadata={'axes': 'ZYX'})
-            print(f"  Saved to: {output_path}")
+            logger.debug(f"  Saved to: {output_path}")
         else:
             # Not a 2D sequence, process each 3D TIF separately
             tif_files = sorted(
@@ -252,16 +258,16 @@ def process_path(input_path: str, output_dir: str = None) -> None:
             if not tif_files:
                 raise ValueError(f"No TIF files found in directory: {input_path}")
 
-            print(f"Found {len(tif_files)} TIF files in directory")
+            logger.info(f"Found {len(tif_files)} TIF files in directory")
 
             for idx, tif_file in enumerate(tif_files, start=1):
                 try:
                     process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}")
                 except Exception as e:
-                    print(f"Error processing {tif_file}: {e}")
+                    logger.error(f"Error processing {tif_file}: {e}")
                     raise
 
-            print(f"Completed processing {len(tif_files)} files")
+            logger.info(f"Completed processing {len(tif_files)} files")
     else:
         raise ValueError(f"Input path is neither file nor directory: {input_path}")
 
@@ -274,14 +280,17 @@ def main():
         print("  output_dir: Optional output directory (default: preprocess_output/YYYYMMDD_HHMMSS/01_format)")
         sys.exit(1)
 
+    # Setup logging
+    setup_logging()
+
     input_path = sys.argv[1]
     output_dir = sys.argv[2] if len(sys.argv) > 2 else None
 
     try:
         process_path(input_path, output_dir)
-        print("Processing completed")
+        logger.info("Processing completed")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         sys.exit(1)
 
 
