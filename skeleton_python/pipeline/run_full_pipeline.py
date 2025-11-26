@@ -54,7 +54,7 @@ def run_pipeline(
 
     # Setup output directory
     if output_base is None:
-        output_base = str(BASE_DIR / 'preprocess_output')
+        output_base = str(BASE_DIR / 'output')
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_base, timestamp)
@@ -89,8 +89,7 @@ def run_pipeline(
 
     # Step 4: Skeletonization
     print("\n[Step 4/4] Skeletonization")
-    skeleton_base = BASE_DIR / 'skeletonize_output' / timestamp
-    skeleton_output = str(skeleton_base / '04_skeleton')
+    skeleton_output = os.path.join(output_dir, '04_skeleton')
     kimimaro_runner.process_directory(
         cleaned_output,
         skeleton_output,
@@ -100,8 +99,7 @@ def run_pipeline(
     print("\n" + "=" * 60)
     print("Pipeline completed")
     print("=" * 60)
-    print(f"Preprocess output: {output_dir}")
-    print(f"Skeleton output: {skeleton_base}")
+    print(f"Output: {output_dir}")
 
     return skeleton_output
 
