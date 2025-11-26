@@ -10,7 +10,7 @@ DEFAULT_CONFIG = Path(__file__).parent / 'preprocess_config.yaml'
 sys.path.insert(0, str(BASE_DIR))
 
 from preprocess import check_tif_format, otsu_threshold, clean_masks
-from pipeline.config_utils import load_config
+from pipeline.utils import load_config
 
 
 def run_pipeline(

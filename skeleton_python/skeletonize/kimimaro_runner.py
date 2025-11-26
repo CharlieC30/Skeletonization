@@ -35,7 +35,7 @@ def extract_timestamp_from_path(input_dir: str) -> str:
 
 def load_config_file(config_path: str = None) -> dict:
     """Load configuration from YAML file."""
-    from pipeline.config_utils import load_config
+    from pipeline.utils import load_config
 
     if config_path is None:
         config_path = DEFAULT_CONFIG
