@@ -2,48 +2,33 @@
 import os
 import sys
 import argparse
-import re
 import time
 from pathlib import Path
-from datetime import datetime
+
 import numpy as np
 import tifffile
 import kimimaro
 
+from pipeline.utils import (
+    ensure_3d,
+    auto_detect_subdir,
+    extract_timestamp_from_path,
+    get_output_dir,
+    load_config,
+    update_config_from_args,
+    setup_logging,
+    SKELETON_SCHEMA,
+)
+
 BASE_DIR = Path(__file__).parent.parent.resolve()
 DEFAULT_CONFIG = BASE_DIR / 'pipeline' / 'skeleton_config.yaml'
-sys.path.insert(0, str(BASE_DIR))
-
-
-def extract_timestamp_from_path(input_dir: str) -> str:
-    """
-    Extract timestamp from path if exists, otherwise create new one.
-
-    Examples:
-        preprocess_output/20251118_143022/ -> 20251118_143022
-        preprocess_output/20251118_143022/03_cleaned/ -> 20251118_143022
-        some/other/path/ -> 20251118_150530 (new)
-    """
-    path = Path(input_dir)
-    # Check if any part matches timestamp format YYYYMMDD_HHMMSS
-    for part in path.parts:
-        if re.match(r'\d{8}_\d{6}', part):
-            return part
-    # No timestamp found, create new
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-
-
-from pipeline.utils import ensure_3d, auto_detect_subdir
 
 
 def load_config_file(config_path: str = None) -> dict:
     """Load configuration from YAML file."""
-    from pipeline.utils import load_config
-
     if config_path is None:
         config_path = DEFAULT_CONFIG
-
-    return load_config(config_path)
+    return load_config(config_path, schema=SKELETON_SCHEMA)
 
 
 def skeletonize_mask(
@@ -204,8 +189,23 @@ def process_single_file(
     return output_dir
 
 
-def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
-    """Process all *_cleaned.tif files in directory."""
+def process_directory(
+    input_dir: str,
+    output_dir: str = None,
+    continue_on_error: bool = False,
+    **kwargs
+) -> None:
+    """Process all *_cleaned.tif files in directory.
+
+    Args:
+        input_dir: Directory containing *_cleaned.tif files.
+        output_dir: Output directory (auto-detected if None).
+        continue_on_error: If True, continue processing on file errors.
+        **kwargs: Arguments passed to process_single_file.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
     input_dir_obj = Path(input_dir)
     if not input_dir_obj.is_absolute():
         input_dir_obj = BASE_DIR / input_dir
@@ -225,9 +225,7 @@ def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
 
     # Auto-detect output directory using timestamp extraction
     if output_dir is None:
-        timestamp = extract_timestamp_from_path(input_dir)
-        output_base = BASE_DIR / 'skeletonize_output' / timestamp / '04_skeleton'
-        output_dir = str(output_base)
+        output_dir = get_output_dir(input_dir, str(BASE_DIR / 'output'), '04_skeleton')
 
     tif_files = [
         os.path.join(input_dir, f)
@@ -245,6 +243,7 @@ def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
     # Create output directory before processing
     os.makedirs(output_dir, exist_ok=True)
 
+    failed_files = []
     for idx, tif_file in enumerate(tif_files, start=1):
         try:
             # Extract 'progress' from kwargs and pass with different key to avoid conflict
@@ -253,10 +252,19 @@ def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
 
             process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}", **file_kwargs)
         except Exception as e:
-            print(f"Error processing {tif_file}: {e}")
-            raise
+            logger.error(f"Failed to process {tif_file}: {e}")
+            failed_files.append((tif_file, str(e)))
+            if not continue_on_error:
+                raise
 
-    print(f"Completed processing {len(tif_files)} files")
+    # Report results
+    successful = len(tif_files) - len(failed_files)
+    print(f"Completed processing {successful}/{len(tif_files)} files")
+
+    if failed_files:
+        logger.warning(f"Failed files ({len(failed_files)}):")
+        for path, error in failed_files:
+            logger.warning(f"  {path}: {error}")
 
 
 def main():
@@ -349,76 +357,56 @@ def main():
         action='store_true',
         help='Disable progress bar',
     )
+    parser.add_argument(
+        '--continue-on-error',
+        action='store_true',
+        help='Continue processing other files if one fails',
+    )
+    parser.add_argument(
+        '--log-file',
+        type=str,
+        help='Path to log file',
+    )
 
     args = parser.parse_args()
+
+    # Setup logging
+    setup_logging(log_file=args.log_file)
 
     # Load config file (fallback defaults)
     config = load_config_file(args.config)
 
-    # Build kwargs from config and CLI args (CLI takes priority)
-    kwargs = {}
+    # CLI arg to config key mapping
+    key_mapping = {
+        'scale': ('teasar_params', 'scale'),
+        'const': ('teasar_params', 'const'),
+        'pdrf_scale': ('teasar_params', 'pdrf_scale'),
+        'pdrf_exponent': ('teasar_params', 'pdrf_exponent'),
+        'keep_largest_only': 'keep_largest_component_only',
+    }
 
-    # TEASAR parameters
-    teasar_params = config.get('teasar_params', {})
-    if args.scale is not None:
-        teasar_params['scale'] = args.scale
-    if args.const is not None:
-        teasar_params['const'] = args.const
-    if args.pdrf_scale is not None:
-        teasar_params['pdrf_scale'] = args.pdrf_scale
-    if args.pdrf_exponent is not None:
-        teasar_params['pdrf_exponent'] = args.pdrf_exponent
-    if teasar_params:
-        kwargs['teasar_params'] = teasar_params
+    # Apply CLI overrides to config
+    config = update_config_from_args(config, args, key_mapping)
 
-    # Other parameters
-    if args.dust_threshold is not None:
-        kwargs['dust_threshold'] = args.dust_threshold
-    elif 'dust_threshold' in config:
-        kwargs['dust_threshold'] = config['dust_threshold']
-
-    if args.anisotropy is not None:
-        kwargs['anisotropy'] = tuple(args.anisotropy)
-    elif 'anisotropy' in config:
-        kwargs['anisotropy'] = tuple(config['anisotropy'])
-
-    if args.parallel is not None:
-        kwargs['parallel'] = args.parallel
-    elif 'parallel' in config:
-        kwargs['parallel'] = config['parallel']
-
-    if args.postprocess_dust_threshold is not None:
-        kwargs['postprocess_dust_threshold'] = args.postprocess_dust_threshold
-    elif 'postprocess_dust_threshold' in config:
-        kwargs['postprocess_dust_threshold'] = config['postprocess_dust_threshold']
-
-    if args.postprocess_tick_threshold is not None:
-        kwargs['postprocess_tick_threshold'] = args.postprocess_tick_threshold
-    elif 'postprocess_tick_threshold' in config:
-        kwargs['postprocess_tick_threshold'] = config['postprocess_tick_threshold']
-
-    if args.keep_largest_only:
-        kwargs['keep_largest_component_only'] = True
-    elif 'keep_largest_component_only' in config:
-        kwargs['keep_largest_component_only'] = config['keep_largest_component_only']
-
+    # Handle inverted boolean flags
     if args.no_fix_branching:
-        kwargs['fix_branching'] = False
-    elif 'fix_branching' in config:
-        kwargs['fix_branching'] = config['fix_branching']
-
+        config['fix_branching'] = False
     if args.no_fix_borders:
-        kwargs['fix_borders'] = False
-    elif 'fix_borders' in config:
-        kwargs['fix_borders'] = config['fix_borders']
-
+        config['fix_borders'] = False
     if args.no_progress:
-        kwargs['progress'] = False
-    elif 'progress' in config:
-        kwargs['progress'] = config['progress']
+        config['progress'] = False
+
+    # Ensure anisotropy is tuple
+    if 'anisotropy' in config and isinstance(config['anisotropy'], list):
+        config['anisotropy'] = tuple(config['anisotropy'])
 
     try:
-        process_directory(args.input_dir, output_dir=args.output_dir, **kwargs)
+        process_directory(
+            args.input_dir,
+            output_dir=args.output_dir,
+            continue_on_error=args.continue_on_error,
+            **config
+        )
         print("Processing completed")
     except Exception as e:
         print(f"Error: {e}")

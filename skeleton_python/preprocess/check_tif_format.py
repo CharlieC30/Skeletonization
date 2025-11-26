@@ -8,13 +8,13 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
+
 import numpy as np
 import tifffile
 
-BASE_DIR = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(BASE_DIR))
-
 from pipeline.utils import ensure_3d
+
+BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
 def load_and_check_tif(path: str) -> np.ndarray:

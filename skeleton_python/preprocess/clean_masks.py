@@ -8,15 +8,15 @@ import sys
 import argparse
 import time
 from pathlib import Path
+
 import numpy as np
 import tifffile
 from scipy.ndimage import binary_opening, binary_closing, binary_fill_holes
 from skimage.morphology import remove_small_objects
 
-BASE_DIR = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(BASE_DIR))
+from pipeline.utils import auto_detect_subdir, setup_logging
 
-from pipeline.utils import auto_detect_subdir
+BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
 def get_structure(image: np.ndarray, radius: int) -> np.ndarray:
@@ -169,18 +169,27 @@ def process_single_file(
     return output_path
 
 
-def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
+def process_directory(
+    input_dir: str,
+    output_dir: str = None,
+    continue_on_error: bool = False,
+    **kwargs
+) -> None:
     """Process all *_otsu.tif files in directory.
 
     Args:
         input_dir: Input directory containing *_otsu.tif files.
         output_dir: Output directory (default: auto-detect as 03_cleaned).
+        continue_on_error: If True, continue processing on file errors.
         **kwargs: Arguments passed to clean_mask().
 
     Raises:
         FileNotFoundError: If input directory does not exist.
         ValueError: If no *_otsu.tif files found.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     input_dir_obj = Path(input_dir)
     if not input_dir_obj.is_absolute():
         input_dir_obj = BASE_DIR / input_dir
@@ -225,14 +234,24 @@ def process_directory(input_dir: str, output_dir: str = None, **kwargs) -> None:
     # Create output directory before processing
     os.makedirs(output_dir, exist_ok=True)
 
+    failed_files = []
     for idx, tif_file in enumerate(tif_files, start=1):
         try:
             process_single_file(tif_file, output_dir, progress=f"{idx}/{len(tif_files)}", **kwargs)
         except Exception as e:
-            print(f"Error processing {tif_file}: {e}")
-            raise
+            logger.error(f"Failed to process {tif_file}: {e}")
+            failed_files.append((tif_file, str(e)))
+            if not continue_on_error:
+                raise
 
-    print(f"Completed processing {len(tif_files)} files")
+    # Report results
+    successful = len(tif_files) - len(failed_files)
+    print(f"Completed processing {successful}/{len(tif_files)} files")
+
+    if failed_files:
+        logger.warning(f"Failed files ({len(failed_files)}):")
+        for path, error in failed_files:
+            logger.warning(f"  {path}: {error}")
 
 
 def main():
@@ -284,8 +303,21 @@ def main():
         action='store_true',
         help='Skip fill holes step',
     )
+    parser.add_argument(
+        '--continue-on-error',
+        action='store_true',
+        help='Continue processing other files if one fails',
+    )
+    parser.add_argument(
+        '--log-file',
+        type=str,
+        help='Path to log file',
+    )
 
     args = parser.parse_args()
+
+    # Setup logging
+    setup_logging(log_file=args.log_file)
 
     kwargs = {
         'opening_radius': args.opening_radius,
@@ -297,7 +329,12 @@ def main():
     }
 
     try:
-        process_directory(args.input_dir, output_dir=args.output_dir, **kwargs)
+        process_directory(
+            args.input_dir,
+            output_dir=args.output_dir,
+            continue_on_error=args.continue_on_error,
+            **kwargs
+        )
         print("Processing completed")
     except Exception as e:
         print(f"Error: {e}")

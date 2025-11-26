@@ -5,12 +5,11 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+from preprocess import check_tif_format, otsu_threshold, clean_masks
+from pipeline.utils import load_config, PREPROCESS_SCHEMA
+
 BASE_DIR = Path(__file__).parent.parent.resolve()
 DEFAULT_CONFIG = Path(__file__).parent / 'preprocess_config.yaml'
-sys.path.insert(0, str(BASE_DIR))
-
-from preprocess import check_tif_format, otsu_threshold, clean_masks
-from pipeline.utils import load_config
 
 
 def run_pipeline(
@@ -31,7 +30,7 @@ def run_pipeline(
     if config_path is None:
         config_path = DEFAULT_CONFIG
 
-    config = load_config(config_path)
+    config = load_config(config_path, schema=PREPROCESS_SCHEMA)
 
     if output_base is None:
         output_base = str(BASE_DIR / 'preprocess_output')

@@ -6,14 +6,14 @@ Applies stack histogram mode (single threshold for entire 3D volume).
 import os
 import sys
 from pathlib import Path
+
 import numpy as np
 import tifffile
 from skimage.filters import threshold_otsu
 
-BASE_DIR = Path(__file__).parent.parent.resolve()
-sys.path.insert(0, str(BASE_DIR))
-
 from pipeline.utils import ensure_3d, auto_detect_subdir
+
+BASE_DIR = Path(__file__).parent.parent.resolve()
 
 
 def compute_stack_otsu_threshold(image: np.ndarray) -> float:

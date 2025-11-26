@@ -5,14 +5,13 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+from preprocess import check_tif_format, otsu_threshold, clean_masks
+from skeletonize import kimimaro_runner
+from pipeline.utils import load_config, PREPROCESS_SCHEMA, SKELETON_SCHEMA
+
 BASE_DIR = Path(__file__).parent.parent.resolve()
 DEFAULT_PREPROCESS_CONFIG = Path(__file__).parent / 'preprocess_config.yaml'
 DEFAULT_SKELETON_CONFIG = Path(__file__).parent / 'skeleton_config.yaml'
-sys.path.insert(0, str(BASE_DIR))
-
-from preprocess import check_tif_format, otsu_threshold, clean_masks
-from skeletonize import kimimaro_runner
-from pipeline.utils import load_config
 
 
 def run_pipeline(
@@ -40,8 +39,8 @@ def run_pipeline(
     if skeleton_config_path is None:
         skeleton_config_path = DEFAULT_SKELETON_CONFIG
 
-    preprocess_config = load_config(preprocess_config_path)
-    skeleton_config = load_config(skeleton_config_path)
+    preprocess_config = load_config(preprocess_config_path, schema=PREPROCESS_SCHEMA)
+    skeleton_config = load_config(skeleton_config_path, schema=SKELETON_SCHEMA)
 
     # Apply CLI overrides
     if cli_overrides:

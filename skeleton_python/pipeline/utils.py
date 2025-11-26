@@ -1,8 +1,35 @@
 """Pipeline utilities."""
 import os
+import re
+import logging
+from datetime import datetime
+from pathlib import Path
+
 import yaml
 import numpy as np
-from pathlib import Path
+
+
+# Schema definitions for config validation
+PREPROCESS_SCHEMA = {
+    'clean_masks': {
+        'opening_radius': int,
+        'closing_radius': int,
+        'min_size_3d': int,
+        'min_size_2d': int,
+    },
+}
+
+SKELETON_SCHEMA = {
+    'teasar_params': {
+        'scale': (int, float),
+        'const': int,
+        'pdrf_scale': (int, float),
+        'pdrf_exponent': (int, float),
+    },
+    'dust_threshold': int,
+    'anisotropy': list,
+    'parallel': int,
+}
 
 
 def load_config(config_path: Path, schema: dict = None) -> dict:
@@ -105,3 +132,96 @@ def auto_detect_subdir(input_dir: str, subdir_name: str) -> str:
         if not tifs:
             return potential
     return input_dir
+
+
+def extract_timestamp_from_path(input_path: str) -> str:
+    """Extract timestamp from path if exists, otherwise create new one.
+
+    Looks for YYYYMMDD_HHMMSS pattern in path components.
+
+    Args:
+        input_path: Input file or directory path.
+
+    Returns:
+        Extracted or newly generated timestamp string.
+    """
+    path = Path(input_path)
+    for part in path.parts:
+        if re.match(r'\d{8}_\d{6}', part):
+            return part
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def get_output_dir(input_path: str, output_base: str, stage: str) -> str:
+    """Get output directory based on input path's experiment timestamp.
+
+    Args:
+        input_path: Input file or directory path.
+        output_base: Base output directory (e.g., 'output').
+        stage: Stage subdirectory (e.g., '04_skeleton').
+
+    Returns:
+        Output directory path preserving experiment timestamp.
+    """
+    timestamp = extract_timestamp_from_path(input_path)
+    return str(Path(output_base) / timestamp / stage)
+
+
+def update_config_from_args(config: dict, args, key_mapping: dict = None) -> dict:
+    """Update config dict with non-None CLI arguments.
+
+    Args:
+        config: Base configuration dict.
+        args: argparse.Namespace object.
+        key_mapping: Optional mapping from arg names to config keys.
+                     Supports nested keys as tuples: ('parent', 'child').
+                     Supports value inversion for boolean flags.
+
+    Returns:
+        Updated config dict.
+    """
+    if key_mapping is None:
+        key_mapping = {}
+
+    for arg_name, value in vars(args).items():
+        if value is None:
+            continue
+
+        if arg_name in key_mapping:
+            target = key_mapping[arg_name]
+            if isinstance(target, tuple):
+                # Nested key like ('teasar_params', 'scale')
+                parent, child = target
+                if parent not in config:
+                    config[parent] = {}
+                config[parent][child] = value
+            else:
+                config[target] = value
+        elif arg_name in config:
+            config[arg_name] = value
+
+    return config
+
+
+def setup_logging(log_file: str = None, level: int = logging.INFO) -> logging.Logger:
+    """Setup logging to console and optionally to file.
+
+    Args:
+        log_file: Optional path to log file.
+        level: Logging level (default: INFO).
+
+    Returns:
+        Configured logger instance.
+    """
+    handlers = [logging.StreamHandler()]
+    if log_file:
+        handlers.append(logging.FileHandler(log_file))
+
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=handlers,
+        force=True,
+    )
+    return logging.getLogger(__name__)
