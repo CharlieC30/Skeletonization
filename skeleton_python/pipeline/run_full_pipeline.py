@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 from preprocess import check_tif_format, otsu_threshold, clean_masks
-from skeletonize import kimimaro_runner
+from skeletonize import kimimaro_runner, length_analysis
 from pipeline.utils import (
     load_config,
     setup_logging,
@@ -42,7 +42,7 @@ def run_pipeline(
         **cli_overrides: CLI arguments that override config values.
 
     Returns:
-        Path to output directory (04_skeleton).
+        Path to output directory (05_analysis).
     """
     pipeline_start = time.time()
     step_times = {}
@@ -84,7 +84,7 @@ def run_pipeline(
     logger.info("=" * 60)
 
     # Step 1: Format conversion
-    logger.info("[Step 1/4] Format conversion")
+    logger.info("[Step 1/5] Format conversion")
     t0 = time.time()
     format_output = os.path.join(output_dir, '01_format')
     format_config = preprocess_config.get('format_conversion', {})
@@ -98,14 +98,14 @@ def run_pipeline(
     step_times['Format'] = time.time() - t0
 
     # Step 2: Otsu thresholding
-    logger.info("[Step 2/4] Otsu thresholding")
+    logger.info("[Step 2/5] Otsu thresholding")
     t0 = time.time()
     otsu_output = os.path.join(output_dir, '02_otsu')
     otsu_threshold.process_directory(format_output, otsu_output)
     step_times['Otsu'] = time.time() - t0
 
     # Step 3: Mask cleaning
-    logger.info("[Step 3/4] Mask cleaning")
+    logger.info("[Step 3/5] Mask cleaning")
     t0 = time.time()
     cleaned_output = os.path.join(output_dir, '03_cleaned')
     clean_masks.process_directory(
@@ -116,15 +116,30 @@ def run_pipeline(
     step_times['Clean'] = time.time() - t0
 
     # Step 4: Skeletonization
-    logger.info("[Step 4/4] Skeletonization")
+    logger.info("[Step 4/5] Skeletonization")
     t0 = time.time()
     skeleton_output = os.path.join(output_dir, '04_skeleton')
+    # Filter out analysis config before passing to kimimaro
+    skeleton_params = {k: v for k, v in skeleton_config.items() if k != 'analysis'}
     kimimaro_runner.process_directory(
         cleaned_output,
         skeleton_output,
-        **skeleton_config
+        **skeleton_params
     )
     step_times['Skeleton'] = time.time() - t0
+
+    # Step 5: Length analysis
+    logger.info("[Step 5/5] Length analysis")
+    t0 = time.time()
+    analysis_output = os.path.join(output_dir, '05_analysis')
+    analysis_config = skeleton_config.get('analysis', {})
+    length_analysis.process_directory(
+        skeleton_output,
+        analysis_output,
+        cleaned_dir=cleaned_output,
+        **analysis_config
+    )
+    step_times['Analysis'] = time.time() - t0
 
     # Pipeline summary
     total_time = time.time() - pipeline_start
@@ -137,7 +152,7 @@ def run_pipeline(
         logger.info(f"  {step_name}: {format_duration(step_time)}")
     logger.info(f"Output: {output_dir}")
 
-    return skeleton_output
+    return analysis_output
 
 
 def main():
@@ -215,3 +230,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# python pipeline/run_full_pipeline.py DATA/ori_image/skeleton_roi_8bit_z60-630_crop.tif

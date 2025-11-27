@@ -34,6 +34,11 @@ SKELETON_SCHEMA = {
     'dust_threshold': int,
     'anisotropy': list,
     'parallel': int,
+    'analysis': {
+        'output_json': bool,
+        'output_labeled_tif': bool,
+        'branch_point_radius': int,
+    },
 }
 
 

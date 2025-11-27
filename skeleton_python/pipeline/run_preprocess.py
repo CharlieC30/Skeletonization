@@ -151,5 +151,5 @@ if __name__ == '__main__':
     main()
 
 
-# python pipeline/run_preprocess.py DATA/ori_image/skeleton_roi_8bit_z60-630.tif
+# python pipeline/run_preprocess.py DATA/ori_image/skeleton_roi_8bit_z60-630_crop.tif
 # python pipeline/run_preprocess.py DATA/ori_image/ -c pipeline/preprocess_config.yaml

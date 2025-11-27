@@ -423,7 +423,7 @@ if __name__ == '__main__':
     main()
 
 
-# python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/
+# python skeletonize/kimimaro_runner.py preprocess_output/20251127_171506
 # python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/ --dust-threshold 1000
 # python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/ --config pipeline/skeleton_config.yaml
 # python skeletonize/kimimaro_runner.py preprocess_output/20251117_171518/03_cleaned/ --parallel 2

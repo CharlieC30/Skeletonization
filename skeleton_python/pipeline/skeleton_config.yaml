@@ -20,3 +20,9 @@ parallel: 1
 postprocess_dust_threshold: 1000
 postprocess_tick_threshold: 0
 keep_largest_component_only: true
+
+# Length analysis configuration
+analysis:
+  output_json: true
+  output_labeled_tif: true
+  branch_point_radius: 1
