@@ -369,6 +369,7 @@ def analyze_skeleton(swc_path: str) -> dict:
         })
 
     return {
+        'coordinate_order': 'ZYX',
         'summary': {
             'total_nodes': len(nodes),
             'total_length': round(total_length, 2),
@@ -376,7 +377,6 @@ def analyze_skeleton(swc_path: str) -> dict:
             'num_branch_points': len(branch_point_ids),
         },
         'main_trunk': {
-            # Coordinates in Z, Y, X order (Kimimaro convention)
             'start': [round(c, 2) for c in start_coords],
             'end': [round(c, 2) for c in end_coords],
             'length': round(trunk_length, 2),
@@ -540,6 +540,17 @@ def process_single_file(input_path: str, output_dir: str,
         with open(json_path, 'w') as f:
             json.dump(result, f, indent=2)
         logger.debug(f"  Saved JSON: {json_path}")
+
+        # Save summary text file
+        summary_path = os.path.join(output_dir, f"{input_stem}_summary.txt")
+        trunk = result['main_trunk']
+        with open(summary_path, 'w') as f:
+            f.write(f"Trunk: {trunk['start']} -> {trunk['end']}, length={trunk['length']}\n\n")
+            f.write("ID  Z      Y      X      MaxLen\n")
+            for b in result['branches']:
+                bp = b['branch_point']
+                f.write(f"{b['id']:<3} {bp[0]:<6.0f} {bp[1]:<6.0f} {bp[2]:<6.0f} {b['max_length']}\n")
+        logger.debug(f"  Saved summary: {summary_path}")
 
     # Save labeled TIF
     if output_labeled_tif:
