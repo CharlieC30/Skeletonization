@@ -25,4 +25,5 @@ keep_largest_component_only: true
 analysis:
   output_json: true
   output_labeled_tif: true
+  output_length_tif: true
   branch_point_radius: 1

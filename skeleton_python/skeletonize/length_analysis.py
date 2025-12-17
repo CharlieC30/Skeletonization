@@ -472,6 +472,67 @@ def generate_labeled_tif(swc_path: str, output_path: str,
     tifffile.imwrite(output_path, rgb_image, photometric='rgb')
 
 
+def generate_length_tif(swc_path: str, output_path: str,
+                        shape: Tuple[int, int, int]) -> None:
+    """Generate 8-bit TIF with length values as pixel intensities.
+
+    Trunk pixels = 255 (white), branch pixels = max_length (integer).
+
+    Args:
+        swc_path: Path to SWC file.
+        output_path: Output TIF file path.
+        shape: Image shape as (Z, Y, X) - numpy array order.
+    """
+    nodes, adj = parse_swc(swc_path)
+
+    if not nodes:
+        logger.warning("No nodes in skeleton, skipping length TIF generation")
+        return
+
+    trunk_path, _ = find_main_trunk(nodes, adj)
+    trunk_set = set(trunk_path)
+    branch_point_ids = list(find_branch_points(trunk_path, adj))
+
+    # Calculate max_length for each branch point and assign to all nodes in subtree
+    branch_node_values = {}  # node_id -> max_length value (integer)
+    for bp_id in branch_point_ids:
+        max_len = calculate_branch_max_length(bp_id, trunk_set, adj)
+        max_len_int = min(254, int(round(max_len)))  # Clamp to 254 (255 reserved for trunk)
+
+        # BFS to find all nodes in this branch point's subtree
+        for neighbor, _ in adj.get(bp_id, []):
+            if neighbor not in trunk_set and neighbor not in branch_node_values:
+                visited = {neighbor}
+                queue = deque([neighbor])
+                while queue:
+                    curr = queue.popleft()
+                    branch_node_values[curr] = max_len_int
+                    for next_node, _ in adj.get(curr, []):
+                        if next_node not in trunk_set and next_node not in visited:
+                            visited.add(next_node)
+                            queue.append(next_node)
+
+    # Create 8-bit image
+    z_dim, y_dim, x_dim = shape
+    length_image = np.zeros((z_dim, y_dim, x_dim), dtype=np.uint8)
+
+    # Draw skeleton points with length values
+    for node_id, node in nodes.items():
+        z = int(round(node['z']))
+        y = int(round(node['y']))
+        x = int(round(node['x']))
+
+        if not (0 <= z < z_dim and 0 <= y < y_dim and 0 <= x < x_dim):
+            continue
+
+        if node_id in trunk_set:
+            length_image[z, y, x] = 255  # Trunk = white
+        elif node_id in branch_node_values:
+            length_image[z, y, x] = branch_node_values[node_id]
+
+    tifffile.imwrite(output_path, length_image)
+
+
 def _find_cleaned_tif(swc_path: str, cleaned_dir: str = None) -> Optional[str]:
     """Find corresponding cleaned TIF file for an SWC file.
 
@@ -510,6 +571,7 @@ def process_single_file(input_path: str, output_dir: str,
                         progress: str = "", cleaned_dir: str = None,
                         output_json: bool = True,
                         output_labeled_tif: bool = True,
+                        output_length_tif: bool = True,
                         branch_point_radius: int = 2) -> str:
     """Process single SWC file for length analysis.
 
@@ -520,6 +582,7 @@ def process_single_file(input_path: str, output_dir: str,
         cleaned_dir: Directory containing cleaned TIF files (for shape).
         output_json: Whether to output JSON file.
         output_labeled_tif: Whether to output labeled TIF.
+        output_length_tif: Whether to output length TIF (32-bit float).
         branch_point_radius: Radius for branch point markers.
 
     Returns:
@@ -568,8 +631,14 @@ def process_single_file(input_path: str, output_dir: str,
             generate_labeled_tif(input_path, tif_path, shape,
                                  branch_point_radius)
             logger.debug(f"  Saved labeled TIF: {tif_path}")
+
+            # Save length TIF (8-bit)
+            if output_length_tif:
+                length_tif_path = os.path.join(output_dir, f"{input_stem}_length.tif")
+                generate_length_tif(input_path, length_tif_path, shape)
+                logger.debug(f"  Saved length TIF: {length_tif_path}")
         else:
-            logger.warning("  Cleaned TIF not found, skipping labeled TIF output")
+            logger.warning("  Cleaned TIF not found, skipping TIF outputs")
 
     # Log summary
     summary = result['summary']

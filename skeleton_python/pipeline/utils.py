@@ -37,6 +37,7 @@ SKELETON_SCHEMA = {
     'analysis': {
         'output_json': bool,
         'output_labeled_tif': bool,
+        'output_length_tif': bool,
         'branch_point_radius': int,
     },
 }
