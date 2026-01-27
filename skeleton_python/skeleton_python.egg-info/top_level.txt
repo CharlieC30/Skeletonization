@@ -1,5 +1,0 @@
-pipeline
-preprocess
-preprocess_output
-skeletonize
-skeletonize_output

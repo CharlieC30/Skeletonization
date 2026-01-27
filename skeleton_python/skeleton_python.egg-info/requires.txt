@@ -1,6 +1,0 @@
-numpy>=2.0
-scipy>=1.13
-scikit-image>=0.24
-tifffile>=2024.8
-kimimaro>=5.6
-pyyaml>=6.0
