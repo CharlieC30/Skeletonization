@@ -4,24 +4,21 @@ A complete pipeline for 3D image skeletonization and analysis.
 
 ## Demo
 
-| Skeleton Extraction | Labeled Structure | Length Map |
-|:---:|:---:|:---:|
-| ![Skeleton](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_projections.gif) | ![Labeled](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_labeled_projections.gif) | ![Length](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_length_projections.gif) |
+| Skeleton Extraction |
+|:---:|
+| ![Skeleton](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_projections.gif) |
 
-**Labeled Structure Colors**:
-| Color | Meaning |
-|-------|---------|
-| White | Main trunk |
-| Yellow | Branch points |
-| Green | Max-length path (longest branch) |
-| Cyan | Other branches |
+| Labeled Structure |
+|:---:|
+| ![Labeled](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_labeled_projections.gif) |
 
-**Length Map Values** (grayscale):
-| Value | Meaning |
-|-------|---------|
-| 255 (white) | Trunk pixels |
-| 1-254 | Branch max length (pixels) |
-| 0 (black) | Background |
+**Colors**: White=trunk, Yellow=branch points, Green=longest branch, Cyan=other branches
+
+| Length Map |
+|:---:|
+| ![Length](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_length_projections.gif) |
+
+**Values**: 255=trunk, 1-254=branch length (pixels), 0=background
 
 ---
 
