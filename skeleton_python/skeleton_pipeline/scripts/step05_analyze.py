@@ -96,12 +96,56 @@ def _bfs_farthest(start: int, adj: Dict, exclude: Set[int] = None) -> Tuple[int,
     return farthest_node, max_dist, parent_map
 
 
+def find_connected_components(nodes: Dict, adj: Dict) -> List[List[int]]:
+    """Find all connected components in the skeleton graph.
+
+    Args:
+        nodes: Dict mapping node ID to node data.
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+
+    Returns:
+        List of components, where each component is a list of node IDs.
+    """
+    visited = set()
+    components = []
+
+    for node_id in nodes:
+        if node_id in visited:
+            continue
+
+        # BFS to find all nodes in this component
+        component = []
+        queue = deque([node_id])
+
+        while queue:
+            curr = queue.popleft()
+            if curr in visited:
+                continue
+            visited.add(curr)
+            component.append(curr)
+
+            for neighbor, _ in adj.get(curr, []):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+
+        components.append(component)
+
+    return components
+
+
 def find_main_trunk(nodes: Dict, adj: Dict) -> Tuple[List[int], float]:
-    """Find main trunk using tree diameter algorithm (two BFS)."""
+    """Find main trunk using tree diameter algorithm (two BFS).
+
+    The trunk is found in the LARGEST connected component to handle
+    skeletons with multiple disconnected parts.
+    """
     if not nodes:
         return [], 0.0
 
-    start = next(iter(nodes.keys()))
+    # Find all connected components and use the largest one
+    components = find_connected_components(nodes, adj)
+    largest_component = max(components, key=len)
+    start = largest_component[0]
     endpoint_a, _, _ = _bfs_farthest(start, adj)
     endpoint_b, trunk_length, parent_map = _bfs_farthest(endpoint_a, adj)
 
