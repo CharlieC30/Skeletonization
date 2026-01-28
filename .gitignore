@@ -20,7 +20,7 @@ skeleton_python/output/*
 !skeleton_python/output/example_output_projections/
 
 # other folders
-DATA/
+DATA
 segment/*
 skeleton_result_fiji/*
 skeleton_result_kimimaro/*
