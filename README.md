@@ -2,30 +2,6 @@
 
 A complete pipeline for 3D image skeletonization and analysis.
 
-## Demo
-
-| Input Image |
-|:---:|
-| ![Input](skeleton_python/output/example_output_projections/sample_input_projections.gif) |
-
-| Skeleton Extraction |
-|:---:|
-| ![Skeleton](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_projections.gif) |
-
-| Labeled Structure |
-|:---:|
-| ![Labeled](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_labeled_projections.gif) |
-
-**Colors**: White=trunk, Yellow=branch points, Green=longest branch, Cyan=other branches
-
-| Length Map |
-|:---:|
-| ![Length](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_length_projections.gif) |
-
-**Values**: 255=trunk, 1-254=branch length (pixels), 0=background
-
----
-
 ## Quick Start
 
 1. Clone the repository
@@ -107,3 +83,26 @@ output/YYYYMMDD_HHMMSS/
 ├── 04_skeleton/         # SWC + skeleton TIF
 └── 05_analysis/         # JSON + labeled TIF
 ```
+---
+
+## Demo
+
+| Input Image |
+|:---:|
+| ![Input](skeleton_python/output/example_output_projections/sample_input_projections.gif) |
+
+| Skeleton Extraction |
+|:---:|
+| ![Skeleton](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_projections.gif) |
+
+| Labeled Structure |
+|:---:|
+| ![Labeled](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_labeled_projections.gif) |
+
+**Colors**: White=trunk, Yellow=branch points, Green=longest branch, Cyan=other branches
+
+| Length Map |
+|:---:|
+| ![Length](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_length_projections.gif) |
+
+**Values**: 255=trunk, 1-254=branch length (pixels), 0=background
