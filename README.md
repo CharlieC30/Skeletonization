@@ -4,6 +4,10 @@ A complete pipeline for 3D image skeletonization and analysis.
 
 ## Demo
 
+| Input Image |
+|:---:|
+| ![Input](skeleton_python/output/example_output_projections/sample_input_projections.gif) |
+
 | Skeleton Extraction |
 |:---:|
 | ![Skeleton](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_projections.gif) |
@@ -63,6 +67,7 @@ Output will be saved to `skeleton_python/output/YYYYMMDD_HHMMSS/`.
 ## Usage
 
 ### Basic usage
+Uses `config/config_sample.yaml` by default.
 ```bash
 python run.py --input ../DATA/your_image.tif
 ```
