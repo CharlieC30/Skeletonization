@@ -11,6 +11,8 @@ Usage:
     python run.py --help
 """
 import argparse
+import os
+import shutil
 import sys
 import time
 import logging
@@ -266,6 +268,18 @@ Steps:
 
     # Get output directory
     output_dir = str(get_output_dir(config, args.output))
+
+    # Create output directory and save config backup
+    os.makedirs(output_dir, exist_ok=True)
+    config_backup_path = os.path.join(output_dir, "config_used.yaml")
+    if args.config:
+        shutil.copy(args.config, config_backup_path)
+    else:
+        # Copy default config
+        from pathlib import Path
+        default_config = Path(__file__).parent / "config" / "config.yaml"
+        shutil.copy(default_config, config_backup_path)
+    logger.info(f"Config saved to: {config_backup_path}")
 
     # Determine step range
     if args.step is not None:

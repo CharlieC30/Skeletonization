@@ -9,24 +9,17 @@ __pycache__/
 kimimaro/*
 !kimimaro/scripts/
 
-# Docker test output
-skeleton_python/docker_test_output/*
+# skeleton_python
+skeleton_python/old_pipeline/*
+skeleton_python/DATA/*
+!skeleton_python/DATA/.gitkeep
+!skeleton_python/DATA/example_input/
+skeleton_python/output/*
+!skeleton_python/output/.gitkeep
+!skeleton_python/output/example_output/
 
+# other folders
 DATA/*
-!DATA/.gitkeep
 segment/*
 skeleton_result_fiji/*
 skeleton_result_kimimaro/*
-
-# skeleton_python 
-skeleton_python/DATA/*
-!skeleton_python/DATA/.gitkeep
-
-skeleton_python/preprocess_output/*
-!skeleton_python/preprocess_output/.gitkeep
-
-skeleton_python/skeletonize_output/*
-!skeleton_python/skeletonize_output/.gitkeep
-
-skeleton_python/output/*
-!skeleton_python/output/.gitkeep

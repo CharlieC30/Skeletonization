@@ -29,7 +29,7 @@ def load_config(config_path: Path = None) -> dict:
         ValueError: Empty config file.
     """
     if config_path is None:
-        config_path = BASE_DIR / "config.yaml"
+        config_path = BASE_DIR / "config" / "config.yaml"
     else:
         config_path = Path(config_path)
 

@@ -2,6 +2,10 @@
 
 A complete pipeline for 3D image skeletonization and analysis.
 
+## Demo
+
+![Pipeline Result](skeleton_python/output/example_output/demo.gif)
+
 ## Overview
 
 This pipeline extracts skeleton structures from 3D TIF images and analyzes their morphology (main trunk, branch points, lengths).
@@ -16,9 +20,18 @@ This pipeline extracts skeleton structures from 3D TIF images and analyzes their
 | 4 | Skeletonization | Extract skeleton using Kimimaro TEASAR algorithm |
 | 5 | Length analysis | Analyze main trunk and branches |
 
+## Sample Data
+
+Download sample data from Google Drive:
+- [Filopodia sample (128MB)](YOUR_GOOGLE_DRIVE_LINK_HERE)
+- [Skeleton ROI sample](YOUR_GOOGLE_DRIVE_LINK_HERE)
+
+Place downloaded files in `skeleton_python/DATA/` directory.
+
 ## Installation
 
 ```bash
+cd skeleton_python/skeleton_pipeline
 pip install -r requirements.txt
 ```
 
@@ -27,7 +40,7 @@ pip install -r requirements.txt
 ### Run full pipeline
 
 ```bash
-cd skeleton_pipeline
+cd skeleton_python/skeleton_pipeline
 python run.py --input ../DATA/input.tif
 ```
 
@@ -49,6 +62,12 @@ python run.py --input ../DATA/input.tif --step 3
 python run.py --input ../DATA/input.tif --from 2 --to 4
 ```
 
+### Use custom config
+
+```bash
+python run.py --input ../DATA/filopodia/sample.tif --config config/config_filopodia.yaml
+```
+
 ### Override parameters
 
 ```bash
@@ -63,7 +82,12 @@ python run.py --help
 
 ## Configuration
 
-Edit `config.yaml` to customize pipeline parameters:
+Configuration files are in `skeleton_pipeline/config/`:
+
+- `config.yaml` - Default parameters (for general use)
+- `config_filopodia.yaml` - Optimized for thin filopodia structures
+
+Edit `config/config.yaml` to customize pipeline parameters:
 
 ```yaml
 # Output settings
@@ -96,6 +120,7 @@ analysis:
 
 ```
 output/YYYYMMDD_HHMMSS/
+├── config_used.yaml     # Copy of config used for this run
 ├── 01_format/           # Normalized TIF files
 ├── 02_otsu/             # Binary masks (*_otsu.tif)
 ├── 03_cleaned/          # Cleaned masks (*_otsu_cleaned.tif)
