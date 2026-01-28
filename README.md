@@ -4,7 +4,14 @@ A complete pipeline for 3D image skeletonization and analysis.
 
 ## Demo
 
-![Pipeline Result](skeleton_python/output/example_output/demo.gif)
+### Skeleton Extraction
+![Skeleton](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_projections.gif)
+
+### Analysis - Labeled Structure
+![Labeled](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_labeled_projections.gif)
+
+### Analysis - Length Map
+![Length](skeleton_python/output/example_output_projections/sample_input_otsu_cleaned_label_1_length_projections.gif)
 
 ## Overview
 
@@ -23,8 +30,7 @@ This pipeline extracts skeleton structures from 3D TIF images and analyzes their
 ## Sample Data
 
 Download sample data from Google Drive:
-- [Filopodia sample (128MB)](YOUR_GOOGLE_DRIVE_LINK_HERE)
-- [Skeleton ROI sample](YOUR_GOOGLE_DRIVE_LINK_HERE)
+- [Sample Data Folder](https://drive.google.com/drive/folders/1w4wIAczOLmvhfEuUUNyLAlcUoYi9cey5?usp=drive_link)
 
 Place downloaded files in `skeleton_python/DATA/` directory.
 
