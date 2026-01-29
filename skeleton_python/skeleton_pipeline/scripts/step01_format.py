@@ -131,7 +131,14 @@ def normalize(array: np.ndarray,
 
 
 def convert_to_uint8(array: np.ndarray) -> np.ndarray:
-    """Convert normalized [0, 1] array to uint8 [0, 255]."""
+    """Convert normalized [0, 1] array to uint8 [0, 255].
+
+    Args:
+        array: Input array with values in range [0, 1].
+
+    Returns:
+        Array with values in range [0, 255] as uint8 type.
+    """
     if array.dtype == np.uint8:
         return array
     return (array * 255).astype(np.uint8)

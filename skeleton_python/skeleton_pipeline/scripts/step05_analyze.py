@@ -24,6 +24,9 @@ BRANCH_COLORS = [(0, 255, 255)]     # cyan - other branch nodes
 def parse_swc(swc_path: str) -> Tuple[Dict[int, dict], Dict[int, List[Tuple[int, float]]]]:
     """Parse SWC file and build graph structure.
 
+    Args:
+        swc_path: Path to the SWC file.
+
     Returns:
         nodes: Dict mapping node ID to {z, y, x, radius, parent}.
         adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
@@ -69,7 +72,17 @@ def parse_swc(swc_path: str) -> Tuple[Dict[int, dict], Dict[int, List[Tuple[int,
 
 
 def _bfs_farthest(start: int, adj: Dict, exclude: Set[int] = None) -> Tuple[int, float, Dict[int, int]]:
-    """BFS to find farthest node from start."""
+    """Find the farthest node from start using BFS (breadth-first search).
+
+    Args:
+        start: Starting node ID.
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+        exclude: Set of node IDs to skip during search.
+
+    Returns:
+        Tuple of (farthest_node_id, max_distance, parent_map).
+        parent_map is used to trace back the path.
+    """
     if exclude is None:
         exclude = set()
 
@@ -307,7 +320,19 @@ def analyze_skeleton(swc_path: str) -> dict:
 
 def generate_labeled_tif(swc_path: str, output_path: str, shape: Tuple[int, int, int],
                          branch_point_radius: int = 2) -> None:
-    """Generate RGB TIF visualization of skeleton analysis."""
+    """Generate RGB TIF image showing skeleton with colored labels.
+
+    Colors: White=trunk, Yellow=branch points, Green=longest branch, Cyan=other branches.
+
+    Args:
+        swc_path: Path to the SWC file.
+        output_path: Path to save the output TIF file.
+        shape: Image shape as (Z, Y, X).
+        branch_point_radius: Size of branch point markers in pixels.
+
+    Returns:
+        None. Saves TIF file to output_path.
+    """
     nodes, adj = parse_swc(swc_path)
     if not nodes:
         return
@@ -381,6 +406,9 @@ def generate_length_tif(swc_path: str, output_path: str,
         swc_path: Path to SWC file.
         output_path: Output TIF file path.
         shape: Image shape as (Z, Y, X).
+
+    Returns:
+        None. Saves TIF file to output_path.
     """
     nodes, adj = parse_swc(swc_path)
     if not nodes:
@@ -428,7 +456,15 @@ def generate_length_tif(swc_path: str, output_path: str,
 
 
 def _find_cleaned_tif(swc_path: str, cleaned_dir: str = None) -> str:
-    """Find corresponding cleaned TIF file for an SWC file."""
+    """Find the cleaned TIF file that matches an SWC file.
+
+    Args:
+        swc_path: Path to the SWC file.
+        cleaned_dir: Directory containing cleaned TIF files. If None, uses default location.
+
+    Returns:
+        Path to the cleaned TIF file, or None if not found.
+    """
     if cleaned_dir is None:
         swc_dir = Path(swc_path).parent
         parent_dir = swc_dir.parent

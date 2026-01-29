@@ -125,7 +125,11 @@ def run_pipeline(
 
 
 def main():
-    """CLI entry point."""
+    """CLI entry point for the skeleton pipeline.
+
+    Parses command line arguments and runs the pipeline.
+    Run with --help to see all options.
+    """
     parser = argparse.ArgumentParser(
         description='Skeleton Pipeline - 3D image skeletonization and analysis',
         formatter_class=argparse.RawDescriptionHelpFormatter,
