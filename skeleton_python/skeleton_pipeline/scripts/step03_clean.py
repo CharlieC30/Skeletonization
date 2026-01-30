@@ -59,7 +59,7 @@ def clean_mask(
     if image.ndim != 3:
         raise ValueError(f"Expected 3D image, got {image.ndim}D.")
 
-    binary = image > 0
+    binary = image > 0 # boolean binary mask
 
     if not skip_remove_small:
         if logger:
@@ -95,7 +95,7 @@ def clean_mask(
         if logger:
             logger.debug(f"  Completed in {time.time() - t0:.1f}s")
 
-    return binary.astype(np.uint8) * 255
+    return binary.astype(np.uint8) * 255 # Convert back to uint8 (0/255)
 
 
 def run(input_path: str, output_dir: str, config: dict, logger: logging.Logger) -> str:

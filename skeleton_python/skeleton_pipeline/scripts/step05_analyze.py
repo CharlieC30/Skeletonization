@@ -151,6 +151,13 @@ def find_main_trunk(nodes: Dict, adj: Dict) -> Tuple[List[int], float]:
 
     The trunk is found in the LARGEST connected component to handle
     skeletons with multiple disconnected parts.
+
+    Args:
+        nodes: Dict mapping node ID to node data.
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+
+    Returns:
+        Tuple of (trunk_path, trunk_length) where trunk_path is list of node IDs.
     """
     if not nodes:
         return [], 0.0
@@ -173,7 +180,18 @@ def find_main_trunk(nodes: Dict, adj: Dict) -> Tuple[List[int], float]:
 
 
 def find_branch_points(trunk_path: List[int], adj: Dict) -> List[int]:
-    """Find branch points on the main trunk (degree >= 3)."""
+    """Find branch points on the main trunk.
+
+    A branch point is a node with degree >= 3 (connected to trunk neighbors
+    plus at least one branch).
+
+    Args:
+        trunk_path: List of node IDs in the main trunk.
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+
+    Returns:
+        List of node IDs that are branch points.
+    """
     branch_points = []
     for node_id in trunk_path:
         degree = len(adj.get(node_id, []))
@@ -183,7 +201,19 @@ def find_branch_points(trunk_path: List[int], adj: Dict) -> List[int]:
 
 
 def calculate_branch_max_length(branch_point: int, trunk_set: Set[int], adj: Dict) -> float:
-    """Calculate maximum branch length from a branch point."""
+    """Calculate maximum branch length from a branch point.
+
+    Finds all branches extending from the branch point and returns the
+    length of the longest one (measured to the farthest leaf node).
+
+    Args:
+        branch_point: Node ID of the branch point on the trunk.
+        trunk_set: Set of node IDs in the main trunk.
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+
+    Returns:
+        Maximum branch length in pixels. Returns 0.0 if no branches exist.
+    """
     branch_starts = []
     for neighbor, dist in adj.get(branch_point, []):
         if neighbor not in trunk_set:
@@ -243,7 +273,16 @@ def find_max_length_path(branch_point: int, trunk_set: Set[int], adj: Dict) -> S
 
 
 def calculate_position_on_trunk(branch_point: int, trunk_path: List[int], adj: Dict) -> float:
-    """Calculate position of branch point on trunk (distance from start)."""
+    """Calculate position of branch point on trunk as distance from start.
+
+    Args:
+        branch_point: Node ID of the branch point.
+        trunk_path: Ordered list of node IDs in the main trunk.
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+
+    Returns:
+        Distance from trunk start to the branch point in pixels.
+    """
     position = 0.0
     for i, node_id in enumerate(trunk_path):
         if node_id == branch_point:
@@ -258,7 +297,14 @@ def calculate_position_on_trunk(branch_point: int, trunk_path: List[int], adj: D
 
 
 def calculate_total_length(adj: Dict) -> float:
-    """Calculate total skeleton length."""
+    """Calculate total skeleton length by summing all edge distances.
+
+    Args:
+        adj: Adjacency list mapping node ID to [(neighbor_id, distance), ...].
+
+    Returns:
+        Total skeleton length in pixels.
+    """
     total = 0.0
     for neighbors in adj.values():
         for _, dist in neighbors:
@@ -267,7 +313,17 @@ def calculate_total_length(adj: Dict) -> float:
 
 
 def analyze_skeleton(swc_path: str) -> dict:
-    """Analyze skeleton structure from SWC file."""
+    """Analyze skeleton structure from SWC file.
+
+    Parses the SWC file and computes main trunk, branch points, and
+    branch lengths.
+
+    Args:
+        swc_path: Path to the SWC file.
+
+    Returns:
+        Dict with keys: coordinate_order, summary, main_trunk, branches.
+    """
     nodes, adj = parse_swc(swc_path)
 
     if not nodes:
