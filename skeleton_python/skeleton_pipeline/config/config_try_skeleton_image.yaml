@@ -1,22 +1,19 @@
-# Skeleton Pipeline Configuration
-# ================================
-
 # Output settings
 output:
-  base_dir: "../output"           # Relative to skeleton_pipeline/, i.e., skeleton_python/output/
-  use_timestamp: true             # Auto-generate timestamped subdirectory (e.g., 20251218_143052/)
+  base_dir: "../output"
+  use_timestamp: true
 
 # Step 1: Format conversion
 format_conversion:
-  normalize_method: minmax        # 'minmax' or 'percentile'
-  percentile_low: 0.0             # For percentile method
-  percentile_high: 100.0          # For percentile method
+  normalize_method: minmax
+  percentile_low: 0.0
+  percentile_high: 100.0
 
 # Step 3: Mask cleaning (morphological operations)
 clean_masks:
-  opening_radius: 1               # 3D opening operation radius (0 to skip)
-  closing_radius: 2               # 3D closing operation radius (0 to skip)
-  min_size: 64                    # Minimum object size in voxels
+  opening_radius: 1
+  closing_radius: 2
+  min_size: 64
 
 # Step 4: Skeletonization (Kimimaro TEASAR algorithm)
 skeletonization:
@@ -25,29 +22,24 @@ skeletonization:
     const: 50
     pdrf_scale: 100000
     pdrf_exponent: 4
-    soma_detection_threshold: 999999    # Set high to disable soma detection
+    soma_detection_threshold: 999999
     soma_acceptance_threshold: 999999
     soma_invalidation_scale: 2
     soma_invalidation_const: 300
     max_paths: null
-  dust_threshold: 500             # Remove components smaller than this before skeletonization (voxels)
-  anisotropy: [1, 1, 1]           # Voxel anisotropy (Z, Y, X)
+  dust_threshold: 500
+  anisotropy: [1, 1, 1]
   fix_branching: true
   fix_borders: true
   progress: true
-  parallel: 1                     # Number of parallel processes
-  postprocess_dust_threshold: 1000  # Remove skeleton fragments shorter than this (physical distance)
-  postprocess_tick_threshold: 0     # Remove terminal branches shorter than this
+  parallel: 1
+  postprocess_dust_threshold: 1000
+  postprocess_tick_threshold: 0
   keep_largest_component_only: true
 
 # Step 5: Length analysis
 analysis:
-  output_json: true               # Output JSON analysis file
-  output_labeled_tif: true        # Output RGB labeled TIF
-  output_length_tif: true         # Output length grayscale TIF
-  branch_point_radius: 2          # Radius for branch point markers
-
-# Logging
-logging:
-  level: INFO                     # DEBUG, INFO, WARNING, ERROR
-  log_to_file: false              # Whether to save log to file
+  output_json: true
+  output_labeled_tif: true
+  output_length_tif: true
+  branch_point_radius: 2

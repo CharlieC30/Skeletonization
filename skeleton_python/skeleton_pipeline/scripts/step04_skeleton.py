@@ -60,7 +60,7 @@ def skeletonize_mask(
             'max_paths': None,
         }
 
-    # Convert to binary labels
+    # Convert to binary labels, kimimaro expects uint8 labels, where 0 = background, >0 = foreground
     labels = (image > 0).astype(np.uint8)
 
     # Run Kimimaro skeletonization
@@ -87,7 +87,7 @@ def skeletonize_mask(
 
     skels_filtered = {}
     for label_id, skel in skels.items():
-        original_vertices = len(skel.vertices)
+        original_vertices = len(skel.vertices) # skel.vertices is a array of vertex coordinates
 
         skel = kimimaro.postprocess(
             skel,
@@ -100,7 +100,15 @@ def skeletonize_mask(
             if len(components) > 1:
                 if logger:
                     logger.debug(f"  Label {label_id}: {len(components)} components, keeping largest")
-                skel = max(components, key=lambda c: c.cable_length())
+                # Find the component with longest cable length
+                longest_component = components[0]
+                longest_length = components[0].cable_length()
+                for component in components[1:]:
+                    length = component.cable_length()
+                    if length > longest_length:
+                        longest_length = length
+                        longest_component = component
+                skel = longest_component
             elif len(components) == 1:
                 skel = components[0]
 
@@ -142,7 +150,7 @@ def run(input_path: str, output_dir: str, config: dict, logger: logging.Logger) 
     dust_threshold = skel_config.get('dust_threshold', 500)
     anisotropy = skel_config.get('anisotropy', [1, 1, 1])
     if isinstance(anisotropy, list):
-        anisotropy = tuple(anisotropy)
+        anisotropy = tuple(anisotropy) # kimimaro expects a tuple
     fix_branching = skel_config.get('fix_branching', True)
     fix_borders = skel_config.get('fix_borders', True)
     progress = skel_config.get('progress', True)
@@ -195,7 +203,7 @@ def run(input_path: str, output_dir: str, config: dict, logger: logging.Logger) 
             logger.warning("No skeletons generated")
             continue
 
-        input_name = tif_file.stem
+        input_name = tif_file.stem # without suffix
         total_vertices = 0
         total_edges = 0
 
@@ -217,10 +225,10 @@ def run(input_path: str, output_dir: str, config: dict, logger: logging.Logger) 
             skeleton_img = np.zeros(image.shape, dtype=np.uint8)
 
             skel_voxel = skel.voxel_space()
-            vertices_int = skel_voxel.vertices.astype(int)
+            vertices_int = skel_voxel.vertices.astype(int) # Convert to integer voxel coordinates
 
             for v in vertices_int:
-                z, y, x = v
+                z, y, x = v # voxel coordinates (z, y, x)
                 if 0 <= z < image.shape[0] and 0 <= y < image.shape[1] and 0 <= x < image.shape[2]:
                     skeleton_img[z, y, x] = 255
 

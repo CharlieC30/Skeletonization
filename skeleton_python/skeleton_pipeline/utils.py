@@ -19,7 +19,7 @@ def load_config(config_path: Path = None) -> dict:
     """Load YAML configuration file.
 
     Args:
-        config_path: Path to config file. If None, uses default config.yaml.
+        config_path: Path to config file. If None, uses default config_sample.yaml.
 
     Returns:
         Configuration dictionary.
@@ -36,7 +36,7 @@ def load_config(config_path: Path = None) -> dict:
     if not config_path.exists():
         raise FileNotFoundError(f"Config not found: {config_path}")
 
-    with open(config_path, 'r') as f:
+    with open(config_path, 'r') as f: # 'r' read mode
         config = yaml.safe_load(f)
 
     if config is None:
@@ -95,6 +95,8 @@ def setup_logging(level: str = "INFO", log_file: str = None) -> logging.Logger:
 
     handlers = [logging.StreamHandler()]
     if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         handlers.append(logging.FileHandler(log_file))
 
     logging.basicConfig(
@@ -142,24 +144,6 @@ def format_duration(seconds: float) -> str:
         secs = seconds % 60
         return f"{minutes}m {secs:.0f}s"
     return f"{seconds:.1f}s"
-
-
-def log_config(config: dict, logger: logging.Logger, title: str = "Configuration"):
-    """Log configuration parameters in formatted output.
-
-    Args:
-        config: Configuration dictionary to log.
-        logger: Logger instance.
-        title: Title for the configuration block.
-    """
-    logger.info(f"{title}:")
-    for key, value in config.items():
-        if isinstance(value, dict):
-            logger.info(f"  {key}:")
-            for k, v in value.items():
-                logger.info(f"    {k}: {v}")
-        else:
-            logger.info(f"  {key}: {value}")
 
 
 def resolve_input_path(input_path: str) -> Path:

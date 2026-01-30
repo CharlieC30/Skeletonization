@@ -56,7 +56,7 @@ def load_and_check_tif(path: str, logger: logging.Logger) -> np.ndarray:
                     }
                     read_dtype = dtype_map.get(base_dtype, base_dtype)
 
-                    with open(path, 'rb') as f:
+                    with open(path, 'rb') as f: # Open in binary mode
                         f.seek(data_offset)
                         all_data = np.fromfile(f, dtype=read_dtype)
 
@@ -234,7 +234,7 @@ def run(input_path: str, output_dir: str, config: dict, logger: logging.Logger) 
 
     if input_path.is_file():
         # Single file
-        if not str(input_path).lower().endswith(('.tif', '.tiff')):
+        if input_path.suffix.lower() not in ('.tif', '.tiff'):
             raise ValueError(f"Input file is not a TIF: {input_path}")
 
         logger.info(f"Processing: {input_path.name}")

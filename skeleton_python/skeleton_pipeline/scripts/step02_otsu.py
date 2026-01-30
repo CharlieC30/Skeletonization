@@ -42,7 +42,7 @@ def compute_stack_otsu_threshold(image: np.ndarray, logger: logging.Logger) -> f
             f"Input dtype is {image.dtype}, expected uint8. "
             "Consider running step01_format first."
         )
-        if np.issubdtype(image.dtype, np.integer):
+        if np.issubdtype(image.dtype, np.integer): # Integer type
             info = np.iinfo(image.dtype)
             hist_range = (info.min, info.max + 1)
             bins = min(256, info.max - info.min + 1)
@@ -97,10 +97,11 @@ def run(input_path: str, output_dir: str, config: dict, logger: logging.Logger) 
     logger.info(f"Output: {output_path}")
 
     # Find all TIF files
-    tif_files = natsorted([
-        f for f in input_dir.iterdir()
-        if f.suffix.lower() in ('.tif', '.tiff') and '_otsu' not in f.name
-    ])
+    tif_files = []
+    for f in input_dir.iterdir():
+        if f.suffix.lower() in ('.tif', '.tiff') and '_otsu' not in f.name:
+            tif_files.append(f)
+    tif_files = natsorted(tif_files)
 
     if not tif_files:
         raise ValueError(f"No TIF files found in: {input_dir}")

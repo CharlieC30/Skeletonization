@@ -16,6 +16,7 @@ import shutil
 import sys
 import time
 import logging
+from pathlib import Path
 
 from utils import (
     load_config,
@@ -23,7 +24,6 @@ from utils import (
     setup_logging,
     format_duration,
     resolve_input_path,
-    log_config,
 )
 
 from scripts import (
@@ -72,8 +72,11 @@ def run_pipeline(
     logger.info("-" * 60)
 
     # Filter steps to run
-    steps_to_run = [(num, module, desc) for num, module, desc in STEPS
-                    if step_from <= num <= step_to]
+    steps_to_run = []
+    
+    for num, module, desc in STEPS:
+        if step_from <= num <= step_to:
+            steps_to_run.append((num, module, desc))
 
     if not steps_to_run:
         logger.error(f"No valid steps in range {step_from}-{step_to}")
@@ -173,7 +176,7 @@ Steps:
     )
     parser.add_argument(
         '--config', '-c',
-        help='Configuration file (default: config.yaml)',
+        help='Configuration file (default: config_sample.yaml)',
     )
     parser.add_argument(
         '--step', '-s',
@@ -208,28 +211,6 @@ Steps:
         help='Logging level (default: INFO)',
     )
 
-    # Config overrides
-    parser.add_argument(
-        '--dust-threshold',
-        type=int,
-        help='Override skeletonization dust threshold',
-    )
-    parser.add_argument(
-        '--opening-radius',
-        type=int,
-        help='Override mask cleaning opening radius',
-    )
-    parser.add_argument(
-        '--closing-radius',
-        type=int,
-        help='Override mask cleaning closing radius',
-    )
-    parser.add_argument(
-        '--min-size',
-        type=int,
-        help='Override mask cleaning min object size',
-    )
-
     args = parser.parse_args()
 
     # Setup logging
@@ -241,27 +222,6 @@ Steps:
     except FileNotFoundError as e:
         logger.error(f"Config file not found: {e}")
         sys.exit(1)
-
-    # Apply CLI overrides
-    if args.dust_threshold is not None:
-        if 'skeletonization' not in config:
-            config['skeletonization'] = {}
-        config['skeletonization']['dust_threshold'] = args.dust_threshold
-
-    if args.opening_radius is not None:
-        if 'clean_masks' not in config:
-            config['clean_masks'] = {}
-        config['clean_masks']['opening_radius'] = args.opening_radius
-
-    if args.closing_radius is not None:
-        if 'clean_masks' not in config:
-            config['clean_masks'] = {}
-        config['clean_masks']['closing_radius'] = args.closing_radius
-
-    if args.min_size is not None:
-        if 'clean_masks' not in config:
-            config['clean_masks'] = {}
-        config['clean_masks']['min_size'] = args.min_size
 
     # Resolve input path
     try:
@@ -280,8 +240,7 @@ Steps:
         shutil.copy(args.config, config_backup_path)
     else:
         # Copy default config
-        from pathlib import Path
-        default_config = Path(__file__).parent / "config" / "config.yaml"
+        default_config = Path(__file__).parent / "config" / "config_sample.yaml"
         shutil.copy(default_config, config_backup_path)
     logger.info(f"Config saved to: {config_backup_path}")
 
@@ -296,10 +255,6 @@ Steps:
     if step_from > step_to:
         logger.error(f"Invalid step range: {step_from} to {step_to}")
         sys.exit(1)
-
-    # Log config (debug mode)
-    if args.log_level == 'DEBUG':
-        log_config(config, logger)
 
     # Run pipeline
     try:
